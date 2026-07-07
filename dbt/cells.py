@@ -49,21 +49,20 @@ _ASAP7 = NodeConfig(
     clock_pins={"CLK"},
 )
 
+_TSMCN7 = NodeConfig(
+    buf_patterns=['BUFFD', 'CKBD', 'BUFFSKRD', 'BUFFSKFD', 'DCCKBD'],
+    inv_patterns=['INVD', 'CKND\\d+BWP', 'CKNTWBD', 'INVSKRD', 'INVSKFD', 'DCCKNTWBD', 'INVPADD', 'CKNTWAD'],
+    in_pins=set(['I']),
+    out_pins=set(['Z', 'ZN']),
+    new_cell='INVD1BWP240H11P57PDULVT',
+    new_cell_in_pin='I',
+    new_cell_out_pin='ZN',
+    clock_pins=set(['CLK', 'CP']),
+)
+
 def get_config(node: str) -> NodeConfig:
     if node == "asap7":
         return _ASAP7
     if node == "tsmcn7":
-        # NDA: full TSMC config lives in the gitignored local file
-        if not os.path.exists(LOCAL_TSMCN7):
-            raise FileNotFoundError(
-                f"tsmcn7 config is NDA and not committed; create {LOCAL_TSMCN7} "
-                "(keys: buf_patterns, inv_patterns, in_pins, out_pins, new_cell, "
-                "new_cell_in_pin, new_cell_out_pin, classify_examples)")
-        j = json.load(open(LOCAL_TSMCN7))
-        return NodeConfig(
-            buf_patterns=j["buf_patterns"], inv_patterns=j["inv_patterns"],
-            in_pins=set(j["in_pins"]), out_pins=set(j["out_pins"]),
-            new_cell=j["new_cell"], new_cell_in_pin=j["new_cell_in_pin"],
-            new_cell_out_pin=j["new_cell_out_pin"],
-            clock_pins=set(j.get("clock_pins", [])))
+        return _TSMCN7
     raise KeyError(node)

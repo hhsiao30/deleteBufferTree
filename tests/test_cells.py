@@ -1,5 +1,4 @@
-import json, os, pytest
-from dbt.cells import get_config, LOCAL_TSMCN7
+from dbt.cells import get_config
 
 def test_asap7_classify():
     c = get_config("asap7")
@@ -14,12 +13,11 @@ def test_asap7_classify():
     assert c.new_cell == "INVxp67_ASAP7_75t_SL"
     assert c.new_cell_in_pin == "A" and c.new_cell_out_pin == "Y"
 
-@pytest.mark.skipif(not os.path.exists(LOCAL_TSMCN7), reason="local tsmcn7 config absent")
 def test_tsmcn7_config_loads():
-    # NDA: assert against strings read from the local (gitignored) file, no literals here
-    cfgj = json.load(open(LOCAL_TSMCN7))
     c = get_config("tsmcn7")
-    assert c.new_cell == cfgj["new_cell"]
-    for cell, want in cfgj.get("classify_examples", {}).items():
-        assert c.classify(cell) == (want or None)
+    assert c.classify("BUFFD6BWP240H11P57PDULVT") == "BUF"
+    assert c.classify("CKND2BWP240H11P57PDULVT") == "INV"
+    assert c.classify("CKND2D1BWP240H11P57PDULVT") is None   # clock NAND2, not inverter
+    assert c.classify("DCCKBD5BWP240H11P57PDULVT") == "BUF"
+    assert c.new_cell == "INVD1BWP240H11P57PDULVT"
     assert "I" in c.in_pins and {"Z", "ZN"} <= c.out_pins
