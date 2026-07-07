@@ -35,7 +35,7 @@ globalNetConnect VDD -type pgpin -pin VDD -inst * -verbose
 globalNetConnect VSS -type pgpin -pin VSS -inst * -verbose
 globalNetConnect VDD -type tiehi -inst * -verbose
 globalNetConnect VSS -type tielo -inst * -verbose
-defOut -floorplan -netlist -routing $CEDAR/${D}_pre_deleteBufferTree.def
+defOut -floorplan -netlist -routing -unplaced $CEDAR/${D}_pre_deleteBufferTree.def
 redirect "$CEDAR/deleteBufferTree.log" { deleteBufferTree -verbose }
 defOut -floorplan -netlist -routing -unplaced $CEDAR/${D}_post_deleteBufferTree_withUnplaced.def
 puts "DONE golden $D"
@@ -71,7 +71,7 @@ globalNetConnect VDD -type pgpin -pin VDDM -inst * -verbose
 globalNetConnect VSS -type pgpin -pin VSS  -inst * -verbose
 globalNetConnect VDD -type tiehi -inst * -verbose
 globalNetConnect VSS -type tielo -inst * -verbose
-defOut -floorplan -netlist -routing $CEDAR/${D}_pre_deleteBufferTree.def
+defOut -floorplan -netlist -routing -unplaced $CEDAR/${D}_pre_deleteBufferTree.def
 redirect "$CEDAR/deleteBufferTree.log" { deleteBufferTree -verbose }
 defOut -floorplan -netlist -routing -unplaced $CEDAR/${D}_post_deleteBufferTree_withUnplaced.def
 puts "DONE golden $D"
