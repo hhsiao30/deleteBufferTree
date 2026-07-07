@@ -43,6 +43,7 @@ COMPONENTS 18 ;
 - U_BUFC BUFx2_ASAP7_75t_R + PLACED ( 500 500 ) N ;
 - U_NOR4 NOR2x1_ASAP7_75t_SL + PLACED ( 100 800 ) N ;
 - U_INVD INVx2_ASAP7_75t_R + PLACED ( 200 800 ) N ;
+- U_ISL BUFx2_ASAP7_75t_R + PLACED ( 300 800 ) N ;
 END COMPONENTS
 PINS 5 ;
 - vddp + NET VDD + DIRECTION INOUT + USE POWER
@@ -85,6 +86,8 @@ NETS 12 ;
 - netD5 ( U_INVD Y ) ;
 - netCK ( PIN clkin ) ( U_BUFC A ) ;
 - netCK2 ( U_BUFC Y ) ( reg\[3\] CLK ) ;
+- netISLIN ( U_ISL A ) ;
+- netISLOUT ( U_ISL Y ) ;
 - netEMPTY ;
 END NETS
 END DESIGN

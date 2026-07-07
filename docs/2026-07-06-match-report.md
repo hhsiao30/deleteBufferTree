@@ -58,7 +58,23 @@ DCCKNTWBD, **DCCKBD** (ac97: delay clock buffers removed by Innovus), **CKNTWAD*
 (mempool: TWA variant), and the `CKND\d+BWP` anchoring fix (clock NAND2 false
 positive, 6,336 instances shielded by the valid-BI guard).
 
-## Appendix: ChipTop (excluded from corpus — hierarchical netlist)
+## Appendix: ChipTop (excluded — mechanism RESOLVED 2026-07-07)
+
+Root cause (three independent investigations + causal probes, artifacts in
+/cedar/.../dbt_probes{,_flatten} and dbt_tool_out/*analysis*): **uniquify-freeze** —
+Innovus does not edit inside module definitions instantiated >1x on non-unique
+netlists. Port boundaries do NOT protect (probe: ports get punched for compensation
+inverters). Full model: 93.7% of keeps, 100% of removes explained; 86.5% freeze,
+6% undriven-net testcase damage (now covered by the tool's driver-existence rule),
+~3.4% freeze-derived rules, 4.1% damaged-DB residual that is provably not
+reproducible from netlist+DEF (clean-DB probe rebuilds the same shape) — hence
+permanent exclusion. Flatten experiment: flat-Innovus removal is a strict superset
+of hier (+2,421/−0); reset-sync "protection" was pure hierarchy effect.
+Probe-derived FLAT rule refinements adopted into the tool (2026-07-07): driven
+sink-less buffers AND single inverters are deleted (dead cells); undriven islands
+are never touched (valid BI now requires a driven input net).
+
+(Original pre-resolution evidence below.)
 
 ChipTop is the ONLY hierarchical netlist in the corpus (383 modules; all other
 designs are flat single-module). Result vs golden after basis fix: 0 under-removals,

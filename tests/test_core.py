@@ -50,13 +50,19 @@ def test_dangling_buffer_deleted_no_insert():
     stats = run_dbt(d, cfg)
     assert "U_BUFD" not in d.components
     assert "netDD" not in d.nets
-    assert stats.skipped_single_inv == 2       # U_INVS + U_INVD trees
+    assert stats.skipped_single_inv == 1       # U_INVS only (U_INVD is dead: removed)
 
-def test_dangling_single_inverter_survives():   # keep-dangling: only observed on ChipTop (hier, excluded); flat corpus has no such case
+def test_driven_dangling_single_inverter_removed():   # probe dangling_probe: Innovus deletes it
     d, cfg = load()
     run_dbt(d, cfg)
-    assert "U_INVD" in d.components
-    assert d.nets["netD5"].terms == [("U_INVD","Y")]
+    assert "U_INVD" not in d.components
+    assert "netD5" not in d.nets
+
+def test_undriven_island_buffer_kept():   # probes P5/P6/P9: undriven islands untouched
+    d, cfg = load()
+    run_dbt(d, cfg)
+    assert "U_ISL" in d.components
+    assert d.nets["netISLIN"].terms == [("U_ISL","A")]
 
 def test_even_port_tree_keeps_port_net_name():   # review finding C1
     d, cfg = load()
@@ -86,5 +92,5 @@ def test_stats_totals():
     d, cfg = load()
     s = run_dbt(d, cfg)
     assert s.removed == {"U_BUF1","U_INV1","U_INV2","U_INV3","U_INVP1","U_INVP2",
-                         "U_BUFD","U_BUFO","U_BUFO2","U_INVO"}
+                         "U_BUFD","U_BUFO","U_BUFO2","U_INVO","U_INVD"}
     assert len(s.inserted) == 3                # mixed tree + parallel merge + odd port

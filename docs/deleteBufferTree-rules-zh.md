@@ -87,16 +87,19 @@
    - 為什麼 preCTS 也會發生:CTS 前雖然沒有工具長出來的 clock tree,但 netlist 可能**自帶**
      clock gating / clock inverter chain(NVDLA 的 `CTS_ccl_*`),Innovus 的 timing graph
      一樣把它們標成 clock path。
-2. **單顆 inverter 樹:** 不動(有無 sink 皆同)。
-   - **證據強度注意:** 「有 sink 的單顆 INV 不動」由 flat 語料 14/14 充分驗證;
-     「**懸空**(無 sink)的單顆 INV 不動」在 flat 語料 13 個設計中**不存在任何案例**,無法由 14/14 驗證——
-     唯一實測證據來自被排除的階層式 ChipTop(12,841 顆懸空單 INV,Innovus 保留 12,836、刪 5)。
-     本工具選擇保留,與該多數行為一致,但在 flat 設計上屬**未驗證外推**。
-   - 單顆 **buffer** 樹照刪(buffer 無邏輯貢獻,永遠是淨賺);懸空 buffer 同樣只有 ChipTop 有案例,同上注意。
-3. **Scan 不是豁免來源(探針驗證,2026-07-07):** scan path(QN→SI)上的 buffer 照刪,
+2. **單顆 inverter 樹(有 sink):** 不動。由 flat 語料 14/14 + 1,908 個 QN 案例充分驗證。
+3. **死 cell 與孤島(2026-07-07 探針定案,dbt_probes/dangling_probe + hier_probe P5/P6/P9):**
+   - **有 driver、無 sink** 的 buffer「和單顆 inverter」→ **照刪**(死邏輯回收;單 INV 跳過規則
+     不適用於無 sink 的情況——這推翻了本文件早前的假設,已修工具與測試)。
+   - **完全孤島** → **整棵不碰**。定義(方向無關,刻意不依賴 pin 名判方向):
+     root net 上除了樹成員自己的輸入腳之外**一無所有**(沒有任何其他 term),且全樹零 sink。
+     教訓:第一版用「pin 名白名單判 driver 存在」實作,SRAM macro 輸出腳不在名單上,
+     把 4 個設計從 PERFECT 打成 MISMATCH — 全語料回歸抓回來後改為此定義,14/14 恢復。
+     (ChipTop 斷線 net 上的 157 顆「無 driver 但有 sink」保留屬於受損 testcase 行為,不納入 flat 規則。)
+4. **Scan 不是豁免來源(探針驗證,2026-07-07):** scan path(QN→SI)上的 buffer 照刪,
    有無 `specifyScanChain` 定義結果相同(dbt_probes/scan_probe,兩版皆刪)。語料中 7/14 設計
    帶未串鏈 scan flop,均在 14/14 驗證內。scan 唯一注意事項是 defOut `-scanChain` 匯出旗標(第七節)。
-4. **文件明載、本語料未觸發的豁免:** `-excNetFile` 排除名單、SDC `set_dont_touch`、
+5. **文件明載、本語料未觸發的豁免:** `-excNetFile` 排除名單、SDC `set_dont_touch`、
    timing arc 為 SPECIAL 的 cell、`-footprint` 限縮。使用這些功能的設計需另行驗證。
 
 ## 六、net 與 instance 的命名規則
@@ -144,11 +147,16 @@
 ## 九、已知適用範圍與極限
 
 - **適用:pre-CTS、flat(單一 module)netlist。** 本語料 14 個 flat 設計跨兩個節點全數精確吻合。
-- **階層式 netlist(多 module)不在保證範圍:** Innovus 對階層 DB 有 module 邊界語意
-  (驅動 module output port 的 buffer 傾向保留、port net 上的第一顆 inverter 傾向保留、
-  懸空 buffer 孤島不動、同一棵「flat 視角的樹」可以部分刪除)。
-  這些判斷需要 module port 資訊,而 **flat DEF 原理上不攜帶**。
-  實測(ChipTop,383 個 module):零漏刪、多刪 0.6%。要精確複製需另讀階層 Verilog。
+- **階層式 netlist(多 module)不在保證範圍 —— 機制已破解(2026-07-07,三方獨立調查 + 因果探針):**
+  真正的規則是 **uniquify 凍結**:netlist 非 unique 時(`init_design_uniquify=0` 預設),
+  **被實例化 >1 次的 module 定義內部整體凍結不編輯**(改一份會改到所有 instance)。
+  module **port 邊界本身不保護**(探針證明:跨 port 樹照刪,補償 inverter 甚至會打穿 port 插進 child)。
+  ChipTop 全設計驗證:刪除側 0% 落在多實例 module、保留側 87% 落在其中;凍結+斷線+衍生規則
+  合計解釋 93.7% 保留與 100% 刪除;殘餘 4% 溯源至該 testcase 受損 DB 的內部狀態,
+  **原理上不可從 netlist+DEF 重現**(乾淨 DB 重建同拓撲會刪)→ ChipTop 維持排除。
+  攤平對照:同一 netlist `saveNetlist -flat` 後重跑,Innovus 刪除集合變為階層版的嚴格超集
+  (+2,421、反向 0),與本工具僅剩斷線 net 慣例差異——階層是因果主因,設計缺陷是殘餘。
+  要覆蓋 ~96% 需一個新輸入(module 實例數表)+ 凍結系列規則(詳 match report 附錄)。
 - **postCTS 未驗證:** clock 豁免規則是在 preCTS 語境驗的;CTS 之後 clock tree 存在,
   豁免的實際範圍需要另行 golden 驗證。
 - **決定性:** 本工具同輸入必得 byte-identical 輸出(有測試守門)。Innovus 端實測可重現

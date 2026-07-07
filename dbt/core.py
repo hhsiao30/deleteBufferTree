@@ -8,6 +8,7 @@ class DbtStats:
     inserted: list = field(default_factory=list)
     skipped_single_inv: int = 0
     skipped_clock: int = 0
+    skipped_island: int = 0
     trees: int = 0
     degenerate: int = 0
     pin_net_rewrites: int = 0
@@ -95,9 +96,35 @@ def run_dbt(d, cfg, clock_cone=None) -> DbtStats:
         if not members:
             continue
         stats.trees += 1
-        if len(members) == 1 and kind[members[0][0]] == "INV":
-            stats.skipped_single_inv += 1
+        member_only = {m for m, _ in members}
+        tree_has_sink = False
+        for inst, _p in members:
+            onet = d.nets.get(out_net[inst])
+            if onet is None:
+                continue
+            for c, p in onet.terms:
+                if c == inst and p in cfg.out_pins:
+                    continue
+                if c in member_only and p in cfg.in_pins:
+                    continue
+                tree_has_sink = True
+                break
+            if tree_has_sink:
+                break
+        # complete island (probe-verified): the root net carries NOTHING except the
+        # members' own input pins (no driver term of any kind, no other loads) and
+        # the tree has zero sinks -> Innovus never touches it. Direction-agnostic:
+        # any non-member term on the root disqualifies (macro-driven nets included).
+        root_all_member_inputs = all(
+            c in member_only and p in cfg.in_pins for c, p in d.nets[R].terms)
+        if not tree_has_sink and root_all_member_inputs:
+            stats.skipped_island += 1
             continue
+        if len(members) == 1 and kind[members[0][0]] == "INV":
+            if tree_has_sink:
+                stats.skipped_single_inv += 1
+                continue
+            # driven single INV with zero sinks: dead cell, Innovus deletes it
         member_set = {m for m, _ in members}
         # tree-level clock exemption: any clock-pin sink anywhere in the tree
         # => whole tree untouched (verified: NVDLA 17/17 CLK trees fully kept,

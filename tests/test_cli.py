@@ -7,5 +7,5 @@ def test_cli_mini(tmp_path):
          "--output", str(out), "--node", "asap7"],
         capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
-    assert "removed=10" in r.stdout and "inserted=3" in r.stdout
+    assert "removed=11" in r.stdout and "inserted=3" in r.stdout
     assert out.exists()
