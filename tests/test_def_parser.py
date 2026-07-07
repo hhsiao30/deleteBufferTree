@@ -14,5 +14,6 @@ def test_parse_mini():
     assert d.pin_names == {"in1","outA","outB"}
     assert d.pin_nets["outA"] == "netOA"
     assert "VERSION 5.8 ;" in d.header          # header may start with a # banner
-    assert "PINS 3 ;" in d.mid
+    assert "PINS 4 ;" in d.mid
+    assert "vddp" not in d.pin_nets            # PG pins excluded (USE POWER/GROUND)
     assert d.footer.strip() == "END DESIGN"

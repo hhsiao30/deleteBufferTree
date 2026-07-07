@@ -71,7 +71,14 @@ def parse_def(path: str) -> Design:
         n = _parse_net_stmt(body)
         d.nets[n.name] = n
 
-    for m in re.finditer(r"^- (\S+) \+ NET (\S+)", d.mid, re.M):
+    # PINS statements: signal pins only — PG pins reference SPECIALNETS,
+    # which live outside the NETS section this tool models
+    for stmt in re.split(r"\n(?=- )", d.mid):
+        m = re.match(r"- (\S+) \+ NET (\S+)", stmt)
+        if not m:
+            continue
+        if "+ USE POWER" in stmt or "+ USE GROUND" in stmt:
+            continue
         d.pin_names.add(m.group(1))
         d.pin_nets[m.group(1)] = m.group(2)
     return d
