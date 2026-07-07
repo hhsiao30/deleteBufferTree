@@ -100,10 +100,14 @@
      教訓:第一版用「pin 名白名單判 driver 存在」實作,SRAM macro 輸出腳不在名單上,
      把 4 個設計從 PERFECT 打成 MISMATCH — 全語料回歸抓回來後改為此定義,14/14 恢復。
      (ChipTop 斷線 net 上的 157 顆「無 driver 但有 sink」保留屬於受損 testcase 行為,不納入 flat 規則。)
-4. **Scan 不是豁免來源(探針驗證,2026-07-07):** scan path(QN→SI)上的 buffer 照刪,
+4. **Clock gating 已覆蓋(2026-07-08 ICG 探針):** 離散 gating(AND/OR)由 NVDLA 實測覆蓋;
+   專用 ICG cell(語料零使用)由 dbt_probes/icg_probe 補驗:ICG 上游(餵其 CLK 輸入)與下游
+   (GCLK 之後)的 clock buffer Innovus 都保留,data buffer 照刪 —— 本工具 PERFECT 重現
+   (ICG 的 CLK pin 在 lib 標 clock:true,pin 級豁免直接命中)。
+5. **Scan 不是豁免來源(探針驗證,2026-07-07):** scan path(QN→SI)上的 buffer 照刪,
    有無 `specifyScanChain` 定義結果相同(dbt_probes/scan_probe,兩版皆刪)。語料中 7/14 設計
    帶未串鏈 scan flop,均在 14/14 驗證內。scan 唯一注意事項是 defOut `-scanChain` 匯出旗標(第七節)。
-5. **文件明載、本語料未觸發的豁免:** `-excNetFile` 排除名單、SDC `set_dont_touch`、
+6. **文件明載、本語料未觸發的豁免:** `-excNetFile` 排除名單、SDC `set_dont_touch`、
    timing arc 為 SPECIAL 的 cell、`-footprint` 限縮。使用這些功能的設計需另行驗證。
 
 ## 六、net 與 instance 的命名規則

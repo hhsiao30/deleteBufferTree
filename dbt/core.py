@@ -78,7 +78,11 @@ def run_dbt(d, cfg, clock_cone=None) -> DbtStats:
                     in_net[comp] = n.name
                 elif cfg.is_bi_out_pin(cellof[comp], pin):
                     out_net[comp] = n.name
-    # valid BI = both pins recognized; others are degenerate and act as logic
+    # valid BI = both pins recognized; others are degenerate and act as logic.
+    # NOTE: a broader "input net must have a driver" rule (Innovus ignores undriven
+    # cones) was tried twice and reverted twice: DEF-view driver existence diverges
+    # from Innovus's DB view on testcases whose DEF/netlist are out of sync (ariane's
+    # 54 uncreated ports). The narrow island rule below is the safe validated form.
     invalid = {c for c in kind if c not in in_net or c not in out_net}
     stats.degenerate = len(invalid)
     for c in invalid:

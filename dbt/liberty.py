@@ -28,6 +28,8 @@ def _norm_expr(e):
 class LibertyConfig:
     """Same interface core.py consumes; built from .lib files."""
 
+    exact_directions = True
+
     def __init__(self, new_inst_prefix="DBT_", new_net_prefix="DBT_N_"):
         self.bi = {}           # cell -> (kind, in_pin, out_pin)
         self.clock = {}        # cell -> set(clock pin names)
