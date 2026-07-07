@@ -93,7 +93,10 @@
      唯一實測證據來自被排除的階層式 ChipTop(12,841 顆懸空單 INV,Innovus 保留 12,836、刪 5)。
      本工具選擇保留,與該多數行為一致,但在 flat 設計上屬**未驗證外推**。
    - 單顆 **buffer** 樹照刪(buffer 無邏輯貢獻,永遠是淨賺);懸空 buffer 同樣只有 ChipTop 有案例,同上注意。
-3. **文件明載、本語料未觸發的豁免:** `-excNetFile` 排除名單、SDC `set_dont_touch`、
+3. **Scan 不是豁免來源(探針驗證,2026-07-07):** scan path(QN→SI)上的 buffer 照刪,
+   有無 `specifyScanChain` 定義結果相同(dbt_probes/scan_probe,兩版皆刪)。語料中 7/14 設計
+   帶未串鏈 scan flop,均在 14/14 驗證內。scan 唯一注意事項是 defOut `-scanChain` 匯出旗標(第七節)。
+4. **文件明載、本語料未觸發的豁免:** `-excNetFile` 排除名單、SDC `set_dont_touch`、
    timing arc 為 SPECIAL 的 cell、`-footprint` 限縮。使用這些功能的設計需另行驗證。
 
 ## 六、net 與 instance 的命名規則
