@@ -52,7 +52,7 @@ def test_dangling_buffer_deleted_no_insert():
     assert "netDD" not in d.nets
     assert stats.skipped_single_inv == 2       # U_INVS + U_INVD trees
 
-def test_dangling_single_inverter_survives():   # Codex #4, refuted by golden: keep it
+def test_dangling_single_inverter_survives():   # keep-dangling: only observed on ChipTop (hier, excluded); flat corpus has no such case
     d, cfg = load()
     run_dbt(d, cfg)
     assert "U_INVD" in d.components
