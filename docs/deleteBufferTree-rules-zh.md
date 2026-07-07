@@ -149,8 +149,11 @@
   - 只解析 `create_clock ... [get_ports X]`;**`get_pins` 不支援**;
   - `[get_ports {a b}]` 大括號多 port **只取第一個**,其餘 clock 被漏掉;
   - `create_generated_clock` 不支援;指令必須在同一行;
-  - **不給 `--sdc` 時 clock-錐豁免整個停用**,只剩「clock pin 直接掛在樹上」的豁免。
-  - 多 clock 設計(如本語料的 ChipTop 型)務必給 `--sdc`,否則結果可能與 Innovus 不符而無警告。
+  - **不給 `--sdc` 時 clock-錐豁免停用**,只剩 pin 級豁免(lib `clock:true`)。
+  - **實測定位(2026-07-08):SDC 對本語料是「可選保險」,不是必要輸入** —— 全 14 設計
+    no-SDC 重跑全數 PERFECT。pin 級豁免已涵蓋:直連 clock、gated clock(NVDLA)、ICG(探針)。
+    SDC 錐唯一必要的拓撲是「buffer 樹卡在 clock port 與離散 gate(其輸入 pin 非 clock pin)之間」——
+    本語料未出現;遇到多 clock / 深 gated-clock 的新設計仍建議照給。
 
 ## 九、已知適用範圍與極限
 
