@@ -20,5 +20,5 @@ def test_unplaced_component_style(tmp_path):
     write_def(d, str(out))
     text = out.read_text()
     assert "- DBT_0 INVxp67_ASAP7_75t_SL + SOURCE TIMING ;" in text
-    assert "COMPONENTS 29 ;" in text
-    assert "NETS 22 ;" in text
+    assert "COMPONENTS 30 ;" in text
+    assert "NETS 24 ;" in text

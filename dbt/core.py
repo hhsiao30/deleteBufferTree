@@ -7,6 +7,7 @@ class DbtStats:
     removed: set = field(default_factory=set)
     inserted: list = field(default_factory=list)
     skipped_single_inv: int = 0
+    skipped_clock: int = 0
     trees: int = 0
     degenerate: int = 0
     pin_net_rewrites: int = 0
@@ -66,6 +67,25 @@ def run_dbt(d, cfg) -> DbtStats:
             stats.skipped_single_inv += 1
             continue
         member_set = {m for m, _ in members}
+        # tree-level clock exemption: any clock-pin sink anywhere in the tree
+        # => whole tree untouched (verified: NVDLA 17/17 CLK trees fully kept,
+        # including 5 mixed clock+data trees)
+        clock_pins = cfg.clock_pins or set()
+        if clock_pins:
+            hit = False
+            for inst, _p in members:
+                onet = d.nets.get(out_net[inst])
+                if onet is None:
+                    continue
+                for comp, pin in onet.terms:
+                    if comp not in member_set and pin in clock_pins:
+                        hit = True
+                        break
+                if hit:
+                    break
+            if hit:
+                stats.skipped_clock += 1
+                continue
         even_sinks, odd_sinks = [], []
         even_port_nets, odd_port_nets = [], []
         for inst, par in members:

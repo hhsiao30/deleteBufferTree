@@ -13,6 +13,7 @@ class NodeConfig:
     new_cell: str
     new_cell_in_pin: str
     new_cell_out_pin: str
+    clock_pins: set = None
     new_inst_prefix: str = "DBT_"
     new_net_prefix: str = "DBT_N_"
 
@@ -33,6 +34,7 @@ _ASAP7 = NodeConfig(
     new_cell="INVxp67_ASAP7_75t_SL",
     new_cell_in_pin="A",
     new_cell_out_pin="Y",
+    clock_pins={"CLK"},
 )
 
 def get_config(node: str) -> NodeConfig:
@@ -50,5 +52,6 @@ def get_config(node: str) -> NodeConfig:
             buf_patterns=j["buf_patterns"], inv_patterns=j["inv_patterns"],
             in_pins=set(j["in_pins"]), out_pins=set(j["out_pins"]),
             new_cell=j["new_cell"], new_cell_in_pin=j["new_cell_in_pin"],
-            new_cell_out_pin=j["new_cell_out_pin"])
+            new_cell_out_pin=j["new_cell_out_pin"],
+            clock_pins=set(j.get("clock_pins", [])))
     raise KeyError(node)

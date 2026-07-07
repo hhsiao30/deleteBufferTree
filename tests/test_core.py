@@ -75,6 +75,13 @@ def test_odd_port_tree_new_inverter_takes_port_net_name():   # review finding C1
     assert ("PIN","outB") in d.nets["netOB"].terms
     assert (dbt[0][0], "Y") in d.nets["netOB"].terms   # new INV drives the PORT net
 
+def test_clock_tree_fully_exempt():   # NVDLA evidence: tree-level exemption
+    d, cfg = load()
+    s = run_dbt(d, cfg)
+    assert "U_BUFC" in d.components          # clock buffer survives
+    assert d.nets["netCK2"].terms == [("U_BUFC","Y"),(r"reg\[3\]","CLK")]
+    assert s.skipped_clock == 1
+
 def test_stats_totals():
     d, cfg = load()
     s = run_dbt(d, cfg)

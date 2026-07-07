@@ -40,13 +40,17 @@ COMPONENTS 18 ;
 - U_NAND3 NAND2xp5_ASAP7_75t_R + PLACED ( 100 700 ) N ;
 - U_BUFO2 BUFx2_ASAP7_75t_R + PLACED ( 150 700 ) N ;
 - U_INVO INVx1_ASAP7_75t_R + PLACED ( 200 700 ) N ;
+- U_BUFC BUFx2_ASAP7_75t_R + PLACED ( 500 500 ) N ;
 - U_NOR4 NOR2x1_ASAP7_75t_SL + PLACED ( 100 800 ) N ;
 - U_INVD INVx2_ASAP7_75t_R + PLACED ( 200 800 ) N ;
 END COMPONENTS
-PINS 4 ;
+PINS 5 ;
 - vddp + NET VDD + DIRECTION INOUT + USE POWER
   + LAYER M5 ( -12 0 ) ( 12 84 )
   + PLACED ( 0 100 ) N ;
+- clkin + NET netCK + DIRECTION INPUT + USE SIGNAL
+  + LAYER M5 ( -12 0 ) ( 12 84 )
+  + PLACED ( 0 50 ) N ;
 - in1 + NET netP + DIRECTION INPUT + USE SIGNAL
   + LAYER M5 ( -12 0 ) ( 12 84 )
   + PLACED ( 0 200 ) N ;
@@ -79,6 +83,8 @@ NETS 12 ;
 - netOB ( U_INVO Y ) ( PIN outB ) ;
 - netD4 ( U_NOR4 Y ) ( U_INVD A ) ;
 - netD5 ( U_INVD Y ) ;
+- netCK ( PIN clkin ) ( U_BUFC A ) ;
+- netCK2 ( U_BUFC Y ) ( reg\[3\] CLK ) ;
 - netEMPTY ;
 END NETS
 END DESIGN

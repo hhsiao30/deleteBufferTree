@@ -14,7 +14,7 @@ def main():
     stats = run_dbt(d, get_config(a.node))
     write_def(d, a.output)
     print(f"DBT: removed={len(stats.removed)} inserted={len(stats.inserted)} "
-          f"trees={stats.trees} skipped_single_inv={stats.skipped_single_inv} "
+          f"trees={stats.trees} skipped_single_inv={stats.skipped_single_inv} skipped_clock={stats.skipped_clock} "
           f"degenerate={stats.degenerate} pin_net_rewrites={stats.pin_net_rewrites}")
 
 if __name__ == "__main__":
