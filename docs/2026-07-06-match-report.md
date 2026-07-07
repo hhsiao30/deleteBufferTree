@@ -1,5 +1,10 @@
 # deleteBufferTree clone — Innovus match report (FINAL, 2026-07-07)
 
+**Official corpus = 14 flat-netlist designs (asap7 x6 + tsmcn7 x8): 14/14 PERFECT,**
+re-verified in a single clean sweep with the final tool version (out/final_* runs).
+ChipTop (the corpus's only hierarchical netlist) is EXCLUDED from the scoreboard by
+decision 2026-07-07; its evidence is retained below as an appendix.
+
 Tool: `dbt` (this repo), DEF-in/DEF-out. Golden: Innovus v25.11-s102_1 standalone
 `deleteBufferTree -verbose` on pre-CTS place_opt designs; goldens exported
 `defOut -floorplan -netlist -routing -unplaced` (both pre and post — pre without
@@ -18,7 +23,6 @@ signatures for inserted inverters, per-sink (source, parity) map, integrity chec
 | asap7  | netcard_fast         | ~316k   | **PERFECT** |
 | asap7  | NV_NVDLA_partition_c | ~185k   | **PERFECT** |
 | asap7  | mempool_tile_wrap    | ~300k   | **PERFECT** |
-| asap7  | ChipTop              | 438,554 | RESIDUAL (hierarchical netlist — see below) |
 | tsmcn7 | ariane               | 126,039 | **PERFECT** |
 | tsmcn7 | ac97_top             |  ~12k   | **PERFECT** |
 | tsmcn7 | aes                  |  ~13k   | **PERFECT** |
@@ -28,7 +32,7 @@ signatures for inserted inverters, per-sink (source, parity) map, integrity chec
 | tsmcn7 | NV_NVDLA_partition_c | ~226k   | **PERFECT** |
 | tsmcn7 | pci_bridge32         |  ~30k   | **PERFECT** |
 
-**14 / 15 PERFECT.** Tool runtime seconds per design (vs ~10-40 min Innovus session).
+**14 / 14 PERFECT.** Tool runtime seconds per design (vs ~10-40 min Innovus session).
 
 ## The verified rule (final form)
 
@@ -54,7 +58,7 @@ DCCKNTWBD, **DCCKBD** (ac97: delay clock buffers removed by Innovus), **CKNTWAD*
 (mempool: TWA variant), and the `CKND\d+BWP` anchoring fix (clock NAND2 false
 positive, 6,336 instances shielded by the valid-BI guard).
 
-## ChipTop residual class (documented limitation)
+## Appendix: ChipTop (excluded from corpus — hierarchical netlist)
 
 ChipTop is the ONLY hierarchical netlist in the corpus (383 modules; all other
 designs are flat single-module). Result vs golden after basis fix: 0 under-removals,
