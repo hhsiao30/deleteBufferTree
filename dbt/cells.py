@@ -17,6 +17,18 @@ class NodeConfig:
     new_inst_prefix: str = "DBT_"
     new_net_prefix: str = "DBT_N_"
 
+    def is_bi_in_pin(self, cell, pin):
+        return pin in self.in_pins
+
+    def is_bi_out_pin(self, cell, pin):
+        return pin in self.out_pins
+
+    def is_clock_pin(self, cell, pin):
+        return bool(self.clock_pins) and pin in self.clock_pins
+
+    def out_pins_of(self, cell):
+        return self.out_pins | {"Y", "Z", "ZN"}
+
     def classify(self, cell: str):
         for p in self.inv_patterns:
             if re.match(p, cell):

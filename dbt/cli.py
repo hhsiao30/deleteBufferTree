@@ -9,11 +9,25 @@ def main():
     ap = argparse.ArgumentParser(description="Standalone DEF-in/DEF-out deleteBufferTree")
     ap.add_argument("--input", required=True)
     ap.add_argument("--output", required=True)
-    ap.add_argument("--node", required=True, choices=["asap7", "tsmcn7"])
+    ap.add_argument("--node", choices=["asap7", "tsmcn7"],
+                    help="builtin preset (legacy)")
+    ap.add_argument("--lib", nargs="+",
+                    help="liberty files/globs: generic mode, classification from cell functions")
+    ap.add_argument("--new-cell", help="compensation inverter cell (generic mode)")
     ap.add_argument("--sdc", help="SDC file: create_clock ports drive clock-cone exemption")
     a = ap.parse_args()
     d = parse_def(a.input)
-    cfg = get_config(a.node)
+    if a.lib:
+        import glob as _glob
+        from .liberty import load_liberty_config
+        files = []
+        for g in a.lib:
+            files += sorted(_glob.glob(g)) or [g]
+        cfg = load_liberty_config(files, a.new_cell)
+    elif a.node:
+        cfg = get_config(a.node)
+    else:
+        ap.error("need --lib (generic) or --node (preset)")
     cone = None
     if a.sdc:
         ports = re.findall(r"create_clock[^\n]*?get_ports\s*\{?\s*([^\s\}\]]+)", open(a.sdc).read())

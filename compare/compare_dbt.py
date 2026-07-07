@@ -24,9 +24,10 @@ def _new_inst_index(pre, x, cfg):
     for net in x.nets.values():
         for comp, pin in net.terms:
             if comp in news:
-                if pin in cfg.in_pins:
+                cell = x.components[comp].cell
+                if cfg.is_bi_in_pin(cell, pin) or pin == cfg.new_cell_in_pin:
                     in_of[comp] = net.name
-                elif pin in cfg.out_pins:
+                elif cfg.is_bi_out_pin(cell, pin) or pin == cfg.new_cell_out_pin:
                     out_of[comp] = net.name
     return news, in_of, out_of
 
@@ -102,10 +103,21 @@ def main():
     ap.add_argument("--pre", required=True)
     ap.add_argument("--ours", required=True)
     ap.add_argument("--golden", required=True)
-    ap.add_argument("--node", required=True)
+    ap.add_argument("--node")
+    ap.add_argument("--lib", nargs="+")
+    ap.add_argument("--new-cell")
     ap.add_argument("--dump", help="write full mismatch lists to this file")
     a = ap.parse_args()
-    r = compare(a.pre, a.ours, a.golden, get_config(a.node))
+    if a.lib:
+        import glob as _glob
+        from dbt.liberty import load_liberty_config
+        files = []
+        for g in a.lib:
+            files += sorted(_glob.glob(g)) or [g]
+        cfg = load_liberty_config(files, a.new_cell)
+    else:
+        cfg = get_config(a.node)
+    r = compare(a.pre, a.ours, a.golden, cfg)
     print(f"removed: ours-only={len(r.removed_only_ours)} gold-only={len(r.removed_only_gold)}")
     print(f"inserted: ours={r.insert_count_ours} gold={r.insert_count_gold}")
     print(f"insert-sig diff: ours-only={len(r.sig_only_ours)} gold-only={len(r.sig_only_gold)}")

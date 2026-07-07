@@ -39,8 +39,12 @@
      (`CKND<驅動數字>`,pin 是 I)共用 `CKND` 前綴。pattern 必須錨定(如 `CKND\d+BWP`),
      而「有效 BI」防護是第二道保險——pin 對不上的 cell 自動退回普通邏輯,不會誤刪
      (實測擋下 6,336 顆;tsmcn7 ariane)。
-  2. **分類的最終裁判是 golden diff**,不是文件:哪個家族該刪,以「Innovus 是否 100% 刪它」為準
-     (例:DCCKND 不刪、DCCKNTWBD 刪、DCCKBD 刪——文件裡的 "SPECIAL arc 不刪" 描述並不能直接推出這張表)。
+  2. **分類的最終裁判是 golden diff**,不是文件(修正 2026-07-07:早前寫「DCCKND 不刪」
+     是空集合命題——全語料 DCCKND/DEL instance 數為 0,從未被驗證)。
+  3. **通用模式(推薦):`--lib` 直讀 Liberty** —— cell 是否 buffer/inverter 由 `function`
+     屬性判定(`I` vs `!I`),pin 方向、clock pin、面積全部來自 lib,無名字 pattern、無節點寫死。
+     14/14 全語料驗證與 pattern 模式等價(兩節點皆 PERFECT)。陷阱:regex 必須錨定行首,
+     否則 `power_down_function` 會誤中。pin 盤點:`python3 -m dbt.liberty --libs <globs> --out pins.csv`。
 - **替換用 inverter**(重建時插入的補償 cell)是**每節點固定一顆**:
   asap7 = `INVxp67_ASAP7_75t_SL`(低 Vt、小驅動);tsmcn7 = 最小驅動的 D1 ULVT inverter。
   不會沿用被刪 inverter 的型號——**sizing 資訊刻意歸零**,交給後續 optDesign 重選。
