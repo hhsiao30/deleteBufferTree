@@ -12,7 +12,39 @@ class DbtStats:
     degenerate: int = 0
     pin_net_rewrites: int = 0
 
-def run_dbt(d, cfg) -> DbtStats:
+def compute_clock_cone(d, cfg, clock_ports):
+    """Forward closure from SDC clock ports: nets carrying (ideal) clock.
+    Propagates through any non-sequential cell (clock gates, muxes, buffers);
+    stops at clock pins of sequential cells (flops/memories)."""
+    from collections import defaultdict as _dd, deque as _dq
+    clock_pins = cfg.clock_pins or set()
+    seq = set()
+    comp_outs = _dd(list)   # comp -> [net names it drives]
+    for n in d.nets.values():
+        for comp, pin in n.terms:
+            if pin in clock_pins:
+                seq.add(comp)
+            if pin in cfg.out_pins or pin == "Y" or pin in ("Z", "ZN"):
+                comp_outs[comp].append(n.name)
+    cone = set()
+    q = _dq()
+    for p in clock_ports:
+        n = d.pin_nets.get(p)
+        if n:
+            cone.add(n); q.append(n)
+    while q:
+        net = q.popleft()
+        for comp, pin in d.nets[net].terms:
+            if comp == "PIN" or pin in clock_pins or comp in seq:
+                continue
+            if pin in cfg.out_pins or pin == "Y" or pin in ("Z", "ZN"):
+                continue   # this term drives the net; do not walk backwards
+            for onet in comp_outs.get(comp, []):
+                if onet not in cone:
+                    cone.add(onet); q.append(onet)
+    return cone
+
+def run_dbt(d, cfg, clock_cone=None) -> DbtStats:
     stats = DbtStats()
     kind = {}
     for name, c in d.components.items():
@@ -70,10 +102,18 @@ def run_dbt(d, cfg) -> DbtStats:
         # tree-level clock exemption: any clock-pin sink anywhere in the tree
         # => whole tree untouched (verified: NVDLA 17/17 CLK trees fully kept,
         # including 5 mixed clock+data trees)
+        if clock_cone and (R in clock_cone
+                           or any(out_net[i] in clock_cone for i, _p in members)):
+            stats.skipped_clock += 1
+            continue
         clock_pins = cfg.clock_pins or set()
         if clock_pins:
-            hit = False
+            # root net itself on the clock cone counts (mempool evidence:
+            # inverters hanging off a CLK-carrying net are kept by Innovus)
+            hit = any(pin in clock_pins for _c, pin in d.nets[R].terms)
             for inst, _p in members:
+                if hit:
+                    break
                 onet = d.nets.get(out_net[inst])
                 if onet is None:
                     continue
