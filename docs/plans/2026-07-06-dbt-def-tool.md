@@ -286,6 +286,7 @@ COMPONENTS 18 ;
 - U_NOR3 NOR2x1_ASAP7_75t_SL + PLACED ( 100 600 ) N ;
 - U_BUFO BUFx2_ASAP7_75t_R + PLACED ( 200 600 ) N ;
 - U_NAND3 NAND2xp5_ASAP7_75t_R + PLACED ( 100 700 ) N ;
+- U_BUFO2 BUFx2_ASAP7_75t_R + PLACED ( 150 700 ) N ;
 - U_INVO INVx1_ASAP7_75t_R + PLACED ( 200 700 ) N ;
 - U_NOR4 NOR2x1_ASAP7_75t_SL + PLACED ( 100 800 ) N ;
 - U_INVD INVx2_ASAP7_75t_R + PLACED ( 200 800 ) N ;
@@ -318,7 +319,8 @@ NETS 12 ;
 - netDD ( U_BUFD Y ) ;
 - netRA ( U_NOR3 Y ) ( U_BUFO A ) ;
 - netOA ( U_BUFO Y ) ( PIN outA ) ;
-- netRB ( U_NAND3 Y ) ( U_INVO A ) ;
+- netRB ( U_NAND3 Y ) ( U_BUFO2 A ) ;
+- netRB2 ( U_BUFO2 Y ) ( U_INVO A ) ;
 - netOB ( U_INVO Y ) ( PIN outB ) ;
 - netD4 ( U_NOR4 Y ) ( U_INVD A ) ;
 - netD5 ( U_INVD Y ) ;
@@ -331,7 +333,7 @@ Fixture adds (review findings C1/M3 + Codex #4): `netRA→BUFO→outA` = even-pa
 OUTPUT-port tree; `netRB→INVO→outB` = odd-parity output-port tree; `U_INVD` =
 DANGLING single inverter (must SURVIVE — golden evidence: Innovus keeps 5 such);
 `netEMPTY` = empty net.
-(Count lines are deliberately understated — 18 vs 27 components, 12 vs 20 nets:
+(Count lines are deliberately understated — 18 vs 28 components, 12 vs 21 nets:
 the parser must not trust count headers; it parses to `END COMPONENTS`/`END NETS`.
 The `#` comment banner stays in the file — DEF permits `#` comments and the real
 Innovus DEFs start with one, so `header` will not start with `VERSION`.)
@@ -344,11 +346,11 @@ from dbt.def_parser import parse_def
 
 def test_parse_mini():
     d = parse_def("tests/fixtures/mini.def")
-    assert len(d.components) == 27
+    assert len(d.components) == 28
     assert d.components["U_BUF1"].cell == "BUFx2_ASAP7_75t_R"
     assert d.components[r"reg\[3\]"].cell == "DFFASRHQNx1_ASAP7_75t_R"
     assert "+ PLACED ( 200 100 ) N" in d.components["U_BUF1"].tail
-    assert len(d.nets) == 20
+    assert len(d.nets) == 21
     assert d.nets["netA"].terms == [("U_NAND","Y"),("U_BUF1","A"),("U_INV1","A"),("U_AOI3","A1")]
     assert d.nets["netA"].props.strip() == "+ SOURCE TIMING"
     assert d.nets["netP"].terms[0] == ("PIN","in1")
@@ -503,8 +505,8 @@ def test_unplaced_component_style(tmp_path):
     write_def(d, str(out))
     text = out.read_text()
     assert "- DBT_0 INVxp67_ASAP7_75t_SL + SOURCE TIMING ;" in text
-    assert "COMPONENTS 28 ;" in text
-    assert "NETS 21 ;" in text
+    assert "COMPONENTS 29 ;" in text
+    assert "NETS 22 ;" in text
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -689,7 +691,7 @@ def test_stats_totals():
     d, cfg = load()
     s = run_dbt(d, cfg)
     assert s.removed == {"U_BUF1","U_INV1","U_INV2","U_INV3","U_INVP1","U_INVP2",
-                         "U_BUFD","U_BUFO","U_INVO"}
+                         "U_BUFD","U_BUFO","U_BUFO2","U_INVO"}
     assert len(s.inserted) == 3                # mixed tree + parallel merge + odd port
 ```
 

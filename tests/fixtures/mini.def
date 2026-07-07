@@ -5,7 +5,7 @@
 #  netp2: NAND2b -> INVP1 -> {AOI4}, INVP2 -> {AOI5}                                  (parallel INVs: merge)
 #  netD: NOR2 -> BUFD (no sinks)                                                      (dangling buffer: delete, insert nothing)
 #  netRA: NOR3 -> BUFO -> PIN outA                                                    (even-parity output-port tree)
-#  netRB: NAND3 -> INVO -> PIN outB                                                   (odd-parity output-port tree)
+#  netRB: NAND3 -> BUFO2 -> INVO -> PIN outB                                          (odd-parity output-port tree, 2 members)
 #  netD4: NOR4 -> INVD (no sinks)                                                     (dangling single INV: must survive)
 VERSION 5.8 ;
 DIVIDERCHAR "/" ;
@@ -38,6 +38,7 @@ COMPONENTS 18 ;
 - U_NOR3 NOR2x1_ASAP7_75t_SL + PLACED ( 100 600 ) N ;
 - U_BUFO BUFx2_ASAP7_75t_R + PLACED ( 200 600 ) N ;
 - U_NAND3 NAND2xp5_ASAP7_75t_R + PLACED ( 100 700 ) N ;
+- U_BUFO2 BUFx2_ASAP7_75t_R + PLACED ( 150 700 ) N ;
 - U_INVO INVx1_ASAP7_75t_R + PLACED ( 200 700 ) N ;
 - U_NOR4 NOR2x1_ASAP7_75t_SL + PLACED ( 100 800 ) N ;
 - U_INVD INVx2_ASAP7_75t_R + PLACED ( 200 800 ) N ;
@@ -70,7 +71,8 @@ NETS 12 ;
 - netDD ( U_BUFD Y ) ;
 - netRA ( U_NOR3 Y ) ( U_BUFO A ) ;
 - netOA ( U_BUFO Y ) ( PIN outA ) ;
-- netRB ( U_NAND3 Y ) ( U_INVO A ) ;
+- netRB ( U_NAND3 Y ) ( U_BUFO2 A ) ;
+- netRB2 ( U_BUFO2 Y ) ( U_INVO A ) ;
 - netOB ( U_INVO Y ) ( PIN outB ) ;
 - netD4 ( U_NOR4 Y ) ( U_INVD A ) ;
 - netD5 ( U_INVD Y ) ;
