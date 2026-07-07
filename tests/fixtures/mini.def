@@ -1,0 +1,79 @@
+# mini.def — synthetic asap7-style fixture; topology summary:
+#  netA: NAND (kept logic) -> [BUF1 -> {AOI1, AOI2}], [INV1 -> {OAI1}], AOI3 direct   (mixed tree)
+#  netP: PIN in1 -> INV2 -> INV3 -> {XOR1}                                            (inverter pair chain)
+#  netS: NOR1 -> INVS -> {XOR2}                                                       (isolated single INV: must survive)
+#  netp2: NAND2b -> INVP1 -> {AOI4}, INVP2 -> {AOI5}                                  (parallel INVs: merge)
+#  netD: NOR2 -> BUFD (no sinks)                                                      (dangling buffer: delete, insert nothing)
+#  netRA: NOR3 -> BUFO -> PIN outA                                                    (even-parity output-port tree)
+#  netRB: NAND3 -> INVO -> PIN outB                                                   (odd-parity output-port tree)
+#  netD4: NOR4 -> INVD (no sinks)                                                     (dangling single INV: must survive)
+VERSION 5.8 ;
+DIVIDERCHAR "/" ;
+BUSBITCHARS "[]" ;
+DESIGN mini ;
+UNITS DISTANCE MICRONS 1000 ;
+DIEAREA ( 0 0 ) ( 10000 10000 ) ;
+COMPONENTS 18 ;
+- U_NAND NAND2xp5_ASAP7_75t_R + PLACED ( 100 100 ) N ;
+- U_BUF1 BUFx2_ASAP7_75t_R + PLACED ( 200 100 ) N ;
+- U_INV1 INVx4_ASAP7_75t_L + PLACED ( 300 100 ) N ;
+- U_AOI1 AOI22xp5_ASAP7_75t_R + PLACED ( 400 100 ) N ;
+- U_AOI2 AOI22xp5_ASAP7_75t_L + PLACED ( 500 100 ) N ;
+- U_AOI3 AOI22xp5_ASAP7_75t_R + PLACED ( 600 100 ) N ;
+- U_OAI1 OAI22x1_ASAP7_75t_R + PLACED ( 700 100 ) N ;
+- U_INV2 INVx1_ASAP7_75t_R + PLACED ( 200 200 ) N ;
+- U_INV3 INVx2_ASAP7_75t_R + PLACED ( 300 200 ) N ;
+- U_XOR1 XOR2xp5_ASAP7_75t_L + PLACED ( 400 200 ) N ;
+- U_NOR1 NOR2x1_ASAP7_75t_SL + PLACED ( 100 300 ) N ;
+- U_INVS INVx3_ASAP7_75t_R + PLACED ( 200 300 ) N ;
+- U_XOR2 XOR2xp5_ASAP7_75t_L + PLACED ( 300 300 ) N ;
+- U_NAND2b NAND2xp5_ASAP7_75t_R + PLACED ( 100 400 ) N ;
+- U_INVP1 INVx1_ASAP7_75t_R + PLACED ( 200 400 ) N ;
+- U_INVP2 INVx2_ASAP7_75t_L + PLACED ( 200 450 ) N ;
+- U_AOI4 AOI22xp5_ASAP7_75t_R + PLACED ( 300 400 ) N ;
+- U_AOI5 AOI22xp5_ASAP7_75t_R + PLACED ( 300 450 ) N ;
+- U_NOR2 NOR2x1_ASAP7_75t_SL + PLACED ( 100 500 ) N ;
+- U_BUFD BUFx2_ASAP7_75t_R + PLACED ( 200 500 ) N ;
+- reg\[3\] DFFASRHQNx1_ASAP7_75t_R + PLACED ( 600 500 ) N ;
+- U_NOR3 NOR2x1_ASAP7_75t_SL + PLACED ( 100 600 ) N ;
+- U_BUFO BUFx2_ASAP7_75t_R + PLACED ( 200 600 ) N ;
+- U_NAND3 NAND2xp5_ASAP7_75t_R + PLACED ( 100 700 ) N ;
+- U_INVO INVx1_ASAP7_75t_R + PLACED ( 200 700 ) N ;
+- U_NOR4 NOR2x1_ASAP7_75t_SL + PLACED ( 100 800 ) N ;
+- U_INVD INVx2_ASAP7_75t_R + PLACED ( 200 800 ) N ;
+END COMPONENTS
+PINS 3 ;
+- in1 + NET netP + DIRECTION INPUT + USE SIGNAL
+  + LAYER M5 ( -12 0 ) ( 12 84 )
+  + PLACED ( 0 200 ) N ;
+- outA + NET netOA + DIRECTION OUTPUT + USE SIGNAL
+  + LAYER M5 ( -12 0 ) ( 12 84 )
+  + PLACED ( 10000 600 ) N ;
+- outB + NET netOB + DIRECTION OUTPUT + USE SIGNAL
+  + LAYER M5 ( -12 0 ) ( 12 84 )
+  + PLACED ( 10000 700 ) N ;
+END PINS
+NETS 12 ;
+- netA ( U_NAND Y ) ( U_BUF1 A ) ( U_INV1 A ) ( U_AOI3 A1 )
+  + SOURCE TIMING ;
+- netB ( U_BUF1 Y ) ( U_AOI1 A1 ) ( U_AOI2 A2 ) ;
+- netY ( U_INV1 Y ) ( U_OAI1 B2 ) ;
+- netP ( PIN in1 ) ( U_INV2 A ) ;
+- netQ ( U_INV2 Y ) ( U_INV3 A ) ;
+- netR ( U_INV3 Y ) ( U_XOR1 A ) ;
+- netS ( U_NOR1 Y ) ( U_INVS A ) ;
+- netT ( U_INVS Y ) ( U_XOR2 A ) ;
+- netp2 ( U_NAND2b Y ) ( U_INVP1 A ) ( U_INVP2 A ) ;
+- netU ( U_INVP1 Y ) ( U_AOI4 A1 ) ;
+- netV ( U_INVP2 Y ) ( U_AOI5 A1 ) ;
+- netD ( U_NOR2 Y ) ( U_BUFD A ) ;
+- netDD ( U_BUFD Y ) ;
+- netRA ( U_NOR3 Y ) ( U_BUFO A ) ;
+- netOA ( U_BUFO Y ) ( PIN outA ) ;
+- netRB ( U_NAND3 Y ) ( U_INVO A ) ;
+- netOB ( U_INVO Y ) ( PIN outB ) ;
+- netD4 ( U_NOR4 Y ) ( U_INVD A ) ;
+- netD5 ( U_INVD Y ) ;
+- netEMPTY ;
+END NETS
+END DESIGN
