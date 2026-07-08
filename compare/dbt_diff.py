@@ -31,13 +31,9 @@ def _cfg(args):
     return None
 
 
-def _fam(cell):
-    return cell.split("_ASAP7")[0].split("BWP")[0]
-
-
 def _placement(comp):
-    for s in ("FIXED", "COVER", "PLACED"):
-        if s in comp.tail:
+    for s in ("FIXED", "COVER", "UNPLACED", "PLACED"):
+        if f"+ {s}" in comp.tail:
             return s
     return "UNPLACED"
 
@@ -82,23 +78,28 @@ def diff(pre, post, cfg=None):
     for (c, p), v in ic.most_common():
         say(f"  {c:40s} {p:9s} {v:>7,}")
 
-    # merge factor: how many distinct removed inverters feed each new inst's sinks
-    if inserted:
-        # sink (comp,pin) -> its pre net -> that net's removed inverter driver
+    # merge factor: how many distinct removed INVERTERS feed each new inst's sinks
+    # (adversarial-review fix: classify==INV required — buffers must not count;
+    #  indexed single pass instead of rescanning all nets per inserted inst)
+    if inserted and cfg:
         pre_net_of_term = {}
         pre_net_drv = {}
         for net in pre.nets.values():
             for comp, pin in net.terms:
                 pre_net_of_term[(comp, pin)] = net.name
-                if comp in removed and cfg and cfg.is_bi_out_pin(pre.components[comp].cell, pin):
+                if (comp in removed
+                        and cfg.classify(pre.components[comp].cell) == "INV"
+                        and cfg.is_bi_out_pin(pre.components[comp].cell, pin)):
                     pre_net_drv[net.name] = comp
+        inst_outs = defaultdict(list)
+        for net in post.nets.values():
+            for c, p in net.terms:
+                if c in inserted and cfg.is_bi_out_pin(post.components[c].cell, p):
+                    inst_outs[c].append(net)
         merge = Counter()
         for n in inserted:
-            outs = [net for net in post.nets.values()
-                    if any(c == n and (not cfg or cfg.is_bi_out_pin(post.components[n].cell, p))
-                           for c, p in net.terms)]
             olds = set()
-            for net in outs:
+            for net in inst_outs.get(n, []):
                 for c, p in net.terms:
                     if c == n:
                         continue
@@ -107,7 +108,7 @@ def diff(pre, post, cfg=None):
                         olds.add(pre_net_drv[pn])
             merge[len(olds)] += 1
         say("")
-        say("INSERTED — merge factor (distinct removed inverters absorbed per new inst)")
+        say("INSERTED — merge factor (distinct removed INVERTERS absorbed per new inst)")
         for k in sorted(merge):
             say(f"  absorbed {k:>2d} old INVs : {merge[k]:>7,} new insts")
 
@@ -138,7 +139,7 @@ def diff(pre, post, cfg=None):
                   for c, p in net.terms if c != "PIN")
     multi = [t for t, v in dup.items() if v > 1]
     if multi:
-        say(f"  {len(multi)} (comp,pin) terms appear on >1 net, e.g. {multi[:3]}")
+        say(f"  {len(multi)} (comp,pin) terms appear more than once across NETS, e.g. {multi[:3]}")
         probs += len(multi)
     if not probs:
         say("  clean (PINS refs valid, no ghost components, no duplicate terms)")
