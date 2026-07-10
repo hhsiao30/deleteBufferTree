@@ -379,6 +379,21 @@ This section covers instance/net names created or preserved by the native
 buffer insertion/deletion commands. It is based on the Innovus 25.11 manual and
 small Innovus experiments on 2026-07-10 using `v25.11-s102_1`.
 
+Expanded experiment coverage:
+
+- Usable buffer masters: `BUF_X1`, `BUF_X2`
+- Usable inverter masters: `INV_X1`, `INV_X2`
+- Tested operations: explicit buffer insertion, automatic buffer insertion,
+  explicit inverter-pair insertion, automatic inverter-pair insertion,
+  single-inverter insertion with `setEcoMode -LEQCheck false`,
+  `ecoDeleteRepeater` on buffers, `ecoDeleteRepeater` on inverter pairs,
+  `ecoDeleteRepeater` on single inverters with `-LEQCheck false`, and
+  `deleteBufferTree` on buffers and inverter pairs.
+
+The exact `FE_*` automatic names and numeric suffixes are implementation
+generated. Do not hard-code them in downstream scripts; capture command return
+values or use explicit `-name` / `-newNetName` where possible.
+
 ### 6.1 `ecoAddRepeater` with explicit names
 
 Manual-confirmed behavior:
@@ -390,7 +405,14 @@ Manual-confirmed behavior:
   `-name {{inv0 inv1}} -newNetName {{net0 net1}}`.
 - The command returns the created instance/net names.
 
-Observed single-buffer result:
+Observed single-buffer results for two different buffer masters:
+
+```text
+BUF_X1: EXB1 n_b1 EXBN1
+BUF_X2: EXB2 n_b2 EXBN2
+```
+
+Example command:
 
 ```tcl
 set r [ecoAddRepeater \
@@ -404,7 +426,7 @@ set r [ecoAddRepeater \
 Return list shape:
 
 ```text
-MY_BUF net_a MY_NET
+<new_buffer_instance> <input_side_net> <output_side_new_net>
 ```
 
 Netlist connectivity shape:
@@ -422,7 +444,14 @@ So, for a single inserted buffer:
 | `[lindex $r 1]` | Input-side net name. This is usually the original net. |
 | `[lindex $r 2]` | Output-side net name. This is the inserted/new net. |
 
-Observed inverter-pair result:
+Observed inverter-pair results for two different inverter masters:
+
+```text
+INV_X1: IP1A n_ip1 IP1N1 IP1B IP1N1 IP1N2
+INV_X2: IP2A n_ip2 IP2N1 IP2B IP2N1 IP2N2
+```
+
+Example command:
 
 ```tcl
 setEcoMode -LEQCheck true
@@ -438,7 +467,7 @@ set r [ecoAddRepeater \
 Return list shape:
 
 ```text
-I0 net_a N0 I1 N0 N1
+<inv0> <input_side_net> <middle_net> <inv1> <middle_net> <output_side_new_net>
 ```
 
 Netlist connectivity shape:
@@ -462,8 +491,8 @@ So, for an inverter pair:
 
 ### 6.2 `ecoAddRepeater` with automatic names
 
-If `-name` and `-newNetName` are omitted, Innovus generates names. In the
-experiment, the default ECO prefix produced:
+If `-name` and `-newNetName` are omitted, Innovus generates names. In one
+single-buffer experiment, the default ECO prefix produced:
 
 ```text
 instance: FE_ECOC0_net_a
@@ -487,8 +516,27 @@ return  : FE_TESTECOC0_net_a net_a FE_TESTECON0_net_a
 
 Manual note: `setEcoMode -prefixName <prefix>` adds a prefix to ECO-inserted
 cells. The observed generated names use the prefix inside the `FE_<prefix>C...`
-and `FE_<prefix>N...` naming pattern. If exact names matter, prefer explicit
-`-name` and `-newNetName`, or capture the return list.
+and `FE_<prefix>N...` naming pattern.
+
+In the expanded matrix with `setEcoMode -prefixName MTX`, observed automatic
+names were:
+
+```text
+BUF_X1: FE_MTXC0_n_ba1 n_ba1 FE_MTXN0_n_ba1
+BUF_X2: FE_MTXC1_n_ba2 n_ba2 FE_MTXN1_n_ba2
+
+INV_X1 pair:
+  FE_MTXC2_n_ipa1 n_ipa1 FE_MTXN2_n_ipa1 \
+  FE_MTXC3_n_ipa1 FE_MTXN2_n_ipa1 FE_MTXN3_n_ipa1
+
+INV_X2 pair:
+  FE_MTXC4_n_ipa2 n_ipa2 FE_MTXN4_n_ipa2 \
+  FE_MTXC5_n_ipa2 FE_MTXN4_n_ipa2 FE_MTXN5_n_ipa2
+```
+
+The counter values `0`, `1`, `2`, ... depend on the ECO sequence and existing
+names in the design. If exact names matter, prefer explicit `-name` and
+`-newNetName`, or capture the return list.
 
 ### 6.3 `ecoAddRepeater` on selected sinks
 
@@ -521,7 +569,46 @@ Manual-confirmed behavior: `ecoDeleteRepeater` deletes a buffer or
 back-to-back inverter pair and merges wires after ECO. The manual does not
 provide a user option for choosing the merged net name.
 
-Observed single-buffer deletion:
+Observed deletion results:
+
+```text
+BUF_X1:
+  before: driver/Y -> b1_0 -> dbuf1/BUF_X1 -> b1_1 -> sink/A
+  after : driver/Y -> b1_0 -> sink/A
+
+BUF_X2:
+  before: driver/Y -> b2_0 -> dbuf2/BUF_X2 -> b2_1 -> sink/A
+  after : driver/Y -> b2_0 -> sink/A
+```
+
+For inverter pairs:
+
+```text
+INV_X1 pair, specified first inverter ip1a:
+  before: driver/Y -> ip1_0 -> ip1a -> ip1_1 -> ip1b -> ip1_2 -> sink/A
+  after : driver/Y -> ip1_0 -> sink/A
+
+INV_X2 pair, specified second inverter ip2b:
+  before: driver/Y -> ip2_0 -> ip2a -> ip2_1 -> ip2b -> ip2_2 -> sink/A
+  after : driver/Y -> ip2_0 -> sink/A
+```
+
+For single inverters with `setEcoMode -LEQCheck false`:
+
+```text
+INV_X1 single:
+  before: driver/Y -> si1_0 -> sinv1 -> si1_1 -> sink/A
+  after : driver/Y -> si1_0 -> sink/A
+
+INV_X2 single:
+  before: driver/Y -> si2_0 -> sinv2 -> si2_1 -> sink/A
+  after : driver/Y -> si2_0 -> sink/A
+```
+
+General observed rule: the driver/input-side net survived, and the downstream
+net or nets were removed.
+
+Simple single-buffer example:
 
 Before:
 
@@ -550,7 +637,32 @@ buffer-output-side net `n1` was removed.
 Manual-confirmed behavior: `deleteBufferTree` removes eligible buffers and
 inverter pairs. It does not provide `-name` or `-newNetName` controls.
 
-Observed single-buffer deletion with non-buffer driver/sink:
+Expanded matrix result with non-buffer driver/sink:
+
+```text
+BUF_X1 selected by input-side net b1_0:
+  after: driver/Y -> b1_0 -> sink/A
+  b1_1 removed
+
+BUF_X2 selected by output-side net b2_1:
+  after: driver/Y -> b2_0 -> sink/A
+  b2_1 removed
+
+INV_X1 pair selected by input-side net ip1_0:
+  after: driver/Y -> ip1_0 -> sink/A
+  ip1_1 and ip1_2 removed
+
+INV_X2 pair selected by output-side net ip2_2:
+  after: driver/Y -> ip2_0 -> sink/A
+  ip2_1 and ip2_2 removed
+```
+
+In the same matrix, single standalone inverters were not removed by
+`deleteBufferTree`; their input and output nets remained. This matches the
+command purpose: remove buffers and back-to-back inverter pairs, not arbitrary
+single inverters.
+
+Simple single-buffer example:
 
 Before:
 
