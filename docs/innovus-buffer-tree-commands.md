@@ -1,8 +1,7 @@
 # Native Innovus buffer-tree and repeater manipulation commands
 
-This document lists only native Cadence Innovus commands relevant to deleting
-buffer trees, inserting/deleting repeaters, and making low-level netlist edits.
-It intentionally documents only native Cadence Innovus commands.
+This document lists only the key native Cadence Innovus commands relevant to
+deleting buffer trees and inserting/deleting repeaters.
 
 Verified against:
 
@@ -66,17 +65,6 @@ deleteBufferTree -preserveRoute -verbose
 # Remove only buffers of a specific footprint.
 deleteBufferTree -footprint B_1P -verbose
 ```
-
-Recommended pre/post DEF snapshots:
-
-```tcl
-defOut -floorplan -netlist -routing -unplaced pre_deleteBufferTree.def
-redirect deleteBufferTree.log { deleteBufferTree -verbose }
-defOut -floorplan -netlist -routing -unplaced post_deleteBufferTree.def
-```
-
-Use `-unplaced` because buffer-tree deletion can create unplaced logical
-compensation cells, and a DEF without `-unplaced` can miss them.
 
 ## 2. `ecoAddRepeater`
 
@@ -196,7 +184,7 @@ ecoAddRepeater \
 ## 3. `setEcoMode`
 
 Purpose: control behavior of interactive ECO commands such as
-`ecoAddRepeater`, `ecoDeleteRepeater`, and `ecoChangeCell`.
+`ecoAddRepeater` and `ecoDeleteRepeater`.
 
 Syntax subset:
 
@@ -385,343 +373,18 @@ addRepeaterByRule \
   -reportIgnoredNets ignored_nets.rpt
 ```
 
-## 6. `defOut`
+## 6. Small key workflows
 
-Purpose: write design information to a DEF file.
-
-Syntax subset:
+### 6.1 Run `deleteBufferTree` only on selected nets
 
 ```tcl
-defOut \
-  <fileName> \
-  [-floorplan] \
-  [-netlist] \
-  [-routing] \
-  [-unplaced] \
-  [-scanChain] \
-  [-selected] \
-  [-usedVia] \
-  [-withShield]
-```
-
-Relevant arguments:
-
-| Argument | Description |
-|---|---|
-| `<fileName>` | Output DEF file. A `.gz` suffix automatically compresses the output. |
-| `-floorplan` | Write floorplan data: rows, chip size, pad/block instances, and placed standard cells. |
-| `-netlist` | Write netlist/connectivity information. Manual note: use with `-unplaced` if the design has not been placed. |
-| `-routing` | Write routing information to the DEF `NETS` section. Implies `-netlist`. |
-| `-unplaced` | Write unplaced standard cell information. |
-| `-scanChain` | Write scan-chain information. |
-| `-selected` | Write selected instance/net/routing information. |
-| `-usedVia` | Write only used vias. |
-| `-withShield` | With `-routing -selected`, also write shielding routing. |
-
-Examples:
-
-```tcl
-# deleteBufferTree-safe snapshot.
-defOut -floorplan -netlist -routing -unplaced post_deleteBufferTree.def
-
-# Include scan-chain information if needed by the flow.
-defOut -floorplan -netlist -routing -unplaced -scanChain post.def
-
-# Gzip-compressed DEF.
-defOut -floorplan -netlist -routing -unplaced post.def.gz
-```
-
-## 7. `redirect`
-
-Purpose: redirect Innovus command output to a file or Tcl variable.
-
-Syntax subset:
-
-```tcl
-redirect [<file_or_var_name>] [<command>] \
-  [-append] \
-  [-tee] \
-  [-stderr] \
-  [-variable] \
-  [-bg]
-```
-
-Arguments:
-
-| Argument | Description |
-|---|---|
-| `<file_or_var_name>` | File or variable name for output. |
-| `<command>` | Command to execute. |
-| `-append` | Append output. |
-| `-tee` | Write to both screen and file/variable. |
-| `-stderr` | Redirect stderr also. |
-| `-variable` | Redirect to a Tcl variable. |
-| `-bg` | Run command in a forked background process. Use carefully due to memory cost. |
-
-Examples:
-
-```tcl
-redirect deleteBufferTree.log { deleteBufferTree -verbose }
-redirect timing.txt "timeDesign -postRoute"
-redirect timing.txt "timeDesign -postRoute" -append -tee
-
-# Redirect dbGet output.
-redirect inst_name.rpt {puts "[dbGet top.insts.name]"}
-```
-
-## 8. Low-level netlist edit commands
-
-These are native Innovus commands. They are lower-level than
-`deleteBufferTree` and `ecoAddRepeater`; use them only when explicit
-connectivity control is needed.
-
-## 8.1 `addInst`
-
-Purpose: add an instance.
-
-Syntax:
-
-```tcl
-addInst \
-  [-help] \
-  [-dontSnapToPlacementGrid] \
-  [-moduleBased <verilogModule>] \
-  [-physical] \
-  -cell <cellName> \
-  -inst <instName> \
-  [-loc {x y} [-ori {R0|R90|R180|R270|MX|MX90|MY|MY90}]] \
-  [-place_status <placementStatus>]
-```
-
-Arguments:
-
-| Argument | Description |
-|---|---|
-| `-cell <cellName>` | Master cell. |
-| `-inst <instName>` | Instance name. |
-| `-loc {x y}` | Location. If omitted, manual states Innovus places the instance at design origin. |
-| `-ori <orientation>` | Orientation. Default is `R0`. |
-| `-place_status <status>` | Placement status: `cover`, `placed`, `fixed`, `soft_fixed`, or `unplaced`. Default is `unplaced`. |
-| `-moduleBased <module>` | Add instance to a specified Verilog module. |
-| `-physical` | Place a physical instance without updating the netlist. |
-| `-dontSnapToPlacementGrid` | With `-loc`, place at the exact location even if off-grid. |
-
-Examples:
-
-```tcl
-# Add an unplaced logical instance.
-addInst -cell INVX1 -inst ECO_INV_0
-
-# Add and place a buffer.
-addInst -cell BUFX4 -inst ECO_BUF_0 -loc {100.0 200.0} -ori R0 -place_status placed
-```
-
-## 8.2 `addNet`
-
-Purpose: add a logical or physical net.
-
-Syntax:
-
-```tcl
-addNet \
-  [-help] \
-  <netName> \
-  [-bus <startID>:<endID>] \
-  [-moduleBased <verilogModule>] \
-  [-power | -ground]
-```
-
-Arguments:
-
-| Argument | Description |
-|---|---|
-| `<netName>` | Net to add. The manual says the net name must be specified before other parameters. |
-| `-bus <start>:<end>` | Create or resize bus net range. |
-| `-moduleBased <module>` | Add net to a specified Verilog module. |
-| `-power` | Add a power net. |
-| `-ground` | Add a ground net. |
-
-Examples:
-
-```tcl
-addNet ECO_N_0
-addNet data_bus -bus 0:7
-addNet VDD_ECO -power
-addNet VSS_ECO -ground
-```
-
-## 8.3 `attachTerm`
-
-Purpose: attach an instance terminal to a net. If the terminal is already
-connected to another net, Innovus detaches it and reconnects it to the new net.
-
-Syntax:
-
-```tcl
-attachTerm \
-  [-help] \
-  <instName> \
-  <termName> \
-  <netName> \
-  [-moduleBased <moduleName>] \
-  [-noNewPort] \
-  [-pin <refInstName> <refTermName>] \
-  [-port <portName>]
-```
-
-Arguments:
-
-| Argument | Description |
-|---|---|
-| `<instName>` | Instance containing the terminal. |
-| `<termName>` | Terminal/pin name to connect. |
-| `<netName>` | Net to connect to. The net must exist. |
-| `-moduleBased <module>` | Attach in a specified Verilog module. |
-| `-noNewPort` | Do not create hierarchical ports as needed. Error if existing ports cannot connect the terminal. |
-| `-pin <refInst> <refTerm>` | Use the hterm used for a reference instance terminal connection. Mutually exclusive with `-port`. |
-| `-port <portName>` | Use a specific hierarchical port. Mutually exclusive with `-pin`. |
-
-Examples:
-
-```tcl
-attachTerm ECO_INV_0 A root_net
-attachTerm ECO_INV_0 Y ECO_N_0
-attachTerm U_SINK A ECO_N_0
-
-# Use a specific hierarchical port.
-attachTerm U1/U2/U3 A net27 -port myPort
-```
-
-## 8.4 `attachModulePort`
-
-Purpose: attach a port in a specified hierarchical instance, or the top level,
-to a net.
-
-Syntax:
-
-```tcl
-attachModulePort \
-  [-help] \
-  <moduleName> \
-  <portName> \
-  <netName> \
-  [-noNewPort]
-```
-
-Arguments:
-
-| Argument | Description |
-|---|---|
-| `<moduleName>` | Module/hinst name. Use `-` for the top module. |
-| `<portName>` | Port name. |
-| `<netName>` | Net on the module. |
-| `-noNewPort` | Prevent creation of hierarchical ports. |
-
-Examples:
-
-```tcl
-# Attach a top-level port.
-attachModulePort - out ECO_N_0
-
-# Attach a hierarchical module port.
-attachModulePort U1/U2 p1 U1/U2/n1
-```
-
-## 8.5 `deleteInst`
-
-Purpose: delete logical or physical instances.
-
-Syntax:
-
-```tcl
-deleteInst \
-  [-help] \
-  <listOfInst> \
-  [-honorDontTouch] \
-  [-moduleBased <moduleName>] \
-  [-verbose]
-```
-
-Arguments:
-
-| Argument | Description |
-|---|---|
-| `<listOfInst>` | Instance or list of instances to delete. Wildcards are supported. |
-| `-honorDontTouch` | Skip instances marked `dont_touch`. |
-| `-moduleBased <module>` | Delete from a specified Verilog module. |
-| `-verbose` | Print deleted-instance messages. |
-
-Examples:
-
-```tcl
-deleteInst U_BUF1
-deleteInst {U_BUF1 U_BUF2} -verbose
-deleteInst U1/*
-deleteInst * -moduleBased SPGM
-
-# Manual recommends Tcl join when using dbGet output.
-deleteInst [join [dbGet top.insts.name]]
-```
-
-## 8.6 `deleteNet`
-
-Purpose: logically delete nets. If a net is routed, associated wire segments
-are also deleted.
-
-Syntax:
-
-```tcl
-deleteNet \
-  [-help] \
-  <netName> \
-  [-bus <startId>:<endId>] \
-  [-moduleBased <verilogModule>]
-```
-
-Arguments:
-
-| Argument | Description |
-|---|---|
-| `<netName>` | Net to delete. Wildcards are supported. |
-| `-bus <start>:<end>` | Delete specified bus bits. The bus bit net must be one-pin/floating on the other side and adjacent to the MSB or LSB of the existing bus. |
-| `-moduleBased <module>` | Delete net from a specified Verilog module. |
-
-Examples:
-
-```tcl
-deleteNet ECO_N_0
-deleteNet old_buffer_net*
-deleteNet h1/net2 -bus 3:2
-```
-
-## 9. Small native-only workflows
-
-### 9.1 Native deleteBufferTree with pre/post DEF
-
-```tcl
-defOut -floorplan -netlist -routing -unplaced pre_deleteBufferTree.def
-
-redirect deleteBufferTree.log {
-  deleteBufferTree -verbose
-}
-
-defOut -floorplan -netlist -routing -unplaced post_deleteBufferTree.def
-```
-
-### 9.2 Run deleteBufferTree only on selected nets
-
-```tcl
-defOut -floorplan -netlist -routing -unplaced pre_selected.def
-
 deleteBufferTree \
   -net {net_a net_b net_c} \
   -preserveRoute \
   -verbose
-
-defOut -floorplan -netlist -routing -unplaced post_selected.def
 ```
 
-### 9.3 Insert a single ECO buffer and record names
+### 6.2 Insert one ECO buffer and record names
 
 ```tcl
 set result [ecoAddRepeater \
@@ -734,7 +397,7 @@ puts "input net    = [lindex $result 1]"
 puts "output net   = [lindex $result 2]"
 ```
 
-### 9.4 Insert a single ECO inverter
+### 6.3 Insert one single ECO inverter
 
 ```tcl
 setEcoMode -LEQCheck false
@@ -749,15 +412,8 @@ set result [ecoAddRepeater \
 puts "single inverter ECO result = $result"
 ```
 
-### 9.5 Low-level logical insert and reconnect
+### 6.4 Delete one ECO buffer
 
 ```tcl
-addNet ECO_N_0
-addInst -cell INVX1 -inst ECO_INV_0
-
-attachTerm ECO_INV_0 A root_net
-attachTerm ECO_INV_0 Y ECO_N_0
-attachTerm U_SINK A ECO_N_0
-
-defOut -floorplan -netlist -routing -unplaced post_low_level_edit.def
+ecoDeleteRepeater -inst U_BUF1
 ```
