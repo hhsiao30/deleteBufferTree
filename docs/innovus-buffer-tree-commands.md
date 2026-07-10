@@ -1,76 +1,73 @@
-# Innovus buffer-tree and repeater manipulation commands
+# Native Innovus buffer-tree and repeater manipulation commands
 
-This is a project cheat sheet for the Innovus commands we use around
-`deleteBufferTree`, repeater ECOs, and the Tcl wrappers in this repository.
+This document lists only native Cadence Innovus commands relevant to deleting
+buffer trees, inserting/deleting repeaters, and making low-level netlist edits.
+It intentionally documents only native Cadence Innovus commands.
 
-Verification source:
+Verified against:
 
-- Cadence Innovus Text Command Reference, product version 25.11, local install:
+- Cadence Innovus Text Command Reference, product version 25.11:
   `/tools/software/cadence/ddi/25.11.001/INNOVUS251/doc/innovusTCR/`
-- Innovus in-tool `man <cmd>` and `<cmd> -help`, checked with
-  `/tools/software/cadence/ddi/latest/bin/innovus` version `v25.11-s102_1`
-  on 2026-07-10.
-- Project wrappers:
-  `tcl/dbt_commands.tcl` and `tcl/dbt_manual.tcl`.
+- Innovus in-tool `man <cmd>` and `<cmd> -help`
+- Installed Innovus binary checked on 2026-07-10:
+  `/tools/software/cadence/ddi/latest/bin/innovus`, version `v25.11-s102_1`
 
-The examples use placeholder library cells such as `BUFX4` and `INVX1`.
-Replace them with legal cells in the active design library. For this project,
-the manual DBT presets currently use:
+The example library cells, such as `BUFX4` and `INVX1`, are placeholders.
+Use legal cells from the active design library.
 
-- ASAP7 compensation inverter: `INVxp67_ASAP7_75t_SL`, input `A`, output `Y`
-- TSMCN7 compensation inverter: `INVD1BWP240H11P57PDULVT`, input `I`, output `ZN`
+## 1. `deleteBufferTree`
 
-## 1. Native buffer-tree deletion
-
-### `deleteBufferTree`
-
-Purpose: remove buffer trees and back-to-back inverter pairs from the design,
-excluding clock-path buffers. Innovus also calls this at the beginning of
+Purpose: remove buffers, except clock-path buffers, and back-to-back inverter
+pairs from the design. Innovus also calls this at the beginning of
 `place_opt_design`, before global placement.
 
-Syntax subset we use:
+Syntax:
 
 ```tcl
 deleteBufferTree \
   [-help] \
-  [-excNetFile <exclude_net_file>] \
-  [-footprint <footprint_name>] \
+  [-excNetFile <excFileName>] \
+  [-footprint <footPrintName>] \
   [-preserveRoute] \
-  [-selNetFile <selected_net_file> | -net {net1 net2 ...}] \
+  [-selNetFile <selFileName> | -net {list_of_nets}] \
   [-verbose]
 ```
 
-Important arguments:
+Arguments:
 
-| Argument | Meaning |
+| Argument | Description |
 |---|---|
-| `-net {net1 net2 ...}` | Process only these hierarchical nets. Mutually exclusive with `-selNetFile`. |
-| `-selNetFile <file>` | Process only hierarchical nets listed in the file. Mutually exclusive with `-net`. |
-| `-excNetFile <file>` | Exclude nets listed in the file. If a net is in both selected and excluded files, exclusion wins. |
-| `-footprint <name>` | Remove only buffers of the specified footprint. Without this, Innovus detects one-input/one-output buffer instances whose timing arc is not `SPECIAL`. |
-| `-preserveRoute` | Preserve routing for nets not impacted by the deletion. By default, Innovus removes routes after this command. |
-| `-verbose` | Print more debug information, including reasons why a buffer/inverter pair was not deleted. |
+| `-help` | Print command usage and parameter type/default information. |
+| `-excNetFile <file>` | File containing hierarchical nets to exclude from buffer removal. If a net is both selected and excluded, exclusion wins. |
+| `-footprint <footprint>` | Remove buffers of a specified footprint. If omitted, Innovus removes one-input/one-output buffer instances whose timing arc is not `SPECIAL`. |
+| `-net {net1 net2 ...}` | Process only the listed hierarchical nets. Mutually exclusive with `-selNetFile`. |
+| `-selNetFile <file>` | File containing hierarchical nets to include. Mutually exclusive with `-net`. |
+| `-preserveRoute` | Preserve routing on nets not impacted by the buffer/inverter deletion. By default, Innovus removes routes after running this command. |
+| `-verbose` | Print extra debug messages, such as reasons a buffer or inverter pair was not deleted. |
 
 Examples:
 
 ```tcl
-# Run full native DBT and capture a log.
-redirect deleteBufferTree.log { deleteBufferTree -verbose }
+# Delete all eligible non-clock buffer trees and inverter pairs.
+deleteBufferTree -verbose
 
-# Process only two root nets.
-deleteBufferTree -net {core/u1/net_a core/u2/net_b} -verbose
+# Delete buffer trees only on selected nets.
+deleteBufferTree -net {top/u1/net_a top/u2/net_b} -verbose
 
-# Process selected nets from a file, but keep excluded nets untouched.
+# Use selected/excluded net files.
 deleteBufferTree \
   -selNetFile selected_nets.txt \
   -excNetFile excluded_nets.txt \
   -verbose
 
-# Keep routing on unaffected nets where possible.
+# Preserve routes on unaffected nets.
 deleteBufferTree -preserveRoute -verbose
+
+# Remove only buffers of a specific footprint.
+deleteBufferTree -footprint B_1P -verbose
 ```
 
-Recommended DEF snapshots:
+Recommended pre/post DEF snapshots:
 
 ```tcl
 defOut -floorplan -netlist -routing -unplaced pre_deleteBufferTree.def
@@ -78,244 +75,215 @@ redirect deleteBufferTree.log { deleteBufferTree -verbose }
 defOut -floorplan -netlist -routing -unplaced post_deleteBufferTree.def
 ```
 
-Why `-unplaced`: DBT compensation inverters can be unplaced logical cells.
-Without `-unplaced`, DEF snapshots can miss those cells.
+Use `-unplaced` because buffer-tree deletion can create unplaced logical
+compensation cells, and a DEF without `-unplaced` can miss them.
 
-## 2. Project wrappers for native DBT
+## 2. `ecoAddRepeater`
 
-Source:
+Purpose: add a buffer, or by default a pair of inverters when the specified
+cell is an inverter, on a net. The command can insert by net, by sink terminal
+list, at explicit coordinates, by relative driver/sink distance, or by
+slack/offload criteria.
 
-```tcl
-source /nethome/hhsiao30/deleteBufferTree/tcl/dbt_commands.tcl
-```
-
-### `dbt::delete_buffer_tree`
-
-Purpose: thin Tcl wrapper around native `deleteBufferTree`, with optional log
-redirection.
-
-```tcl
-dbt::delete_buffer_tree \
-  [-verbose] \
-  [-net|-nets {net1 net2 ...}] \
-  [-selNetFile|-net_file <file>] \
-  [-excNetFile|-exclude_net_file <file>] \
-  [-footprint <name>] \
-  [-preserveRoute|-preserve_route] \
-  [-log <log_file>]
-```
-
-Examples:
-
-```tcl
-dbt::delete_buffer_tree -verbose -log deleteBufferTree.log
-
-dbt::delete_buffer_tree \
-  -nets {core/u1/net_a core/u2/net_b} \
-  -preserve_route \
-  -verbose \
-  -log selected_dbt.log
-```
-
-### `dbt::write_delete_buffer_tree_script`
-
-Purpose: generate a runnable Innovus Tcl script that performs pre/post DEF
-dumping around native DBT.
-
-```tcl
-dbt::write_delete_buffer_tree_script <out_file> \
-  [-pre_def <pre.def>] \
-  [-post_def <post.def>] \
-  [-log <deleteBufferTree.log>] \
-  [-include_unplaced true|false] \
-  [deleteBufferTree args...]
-```
-
-Example:
-
-```tcl
-dbt::write_delete_buffer_tree_script run_native_dbt.tcl \
-  -pre_def pre_deleteBufferTree.def \
-  -post_def post_deleteBufferTree.def \
-  -log deleteBufferTree.log \
-  -include_unplaced true \
-  -verbose
-
-source run_native_dbt.tcl
-```
-
-## 3. Add a buffer or inverter ECO
-
-### `ecoAddRepeater`
-
-Purpose: insert a buffer, or an inverter pair by default, on a net. It can
-insert by net, by sink terminal list, at a location, near a sink/driver, or
-using slack/offload modes.
-
-Syntax subset we use:
+Common syntax subset:
 
 ```tcl
 ecoAddRepeater \
-  {-net <net_name> | -term {inst/pin ...}} \
+  {-net <netName> | -term {term1 term2 ...}} \
   -cell {cell1 [cell2 ...]} \
-  [-name <inst_name_or_names>] \
-  [-newNetName <net_name_or_names>] \
+  [-name <instName>] \
+  [-newNetName <netName>] \
   [-loc {x y} | -loc {x1 y1 x2 y2}] \
-  [-relativeDistToSink <0.0_to_1.0>] \
+  [-relativeDistToSink <sinkWeight>] \
   [-offLoadSlack <slack>] \
   [-offLoadAtLoc {x1a y1a x1b y1b ...}] \
   [-spreadDist <distance>] \
   [-firstSpreadDist <distance>] \
-  [-spreadCount <count>] \
+  [-spreadCount <number>] \
   [-spreadPrefix <prefix>] \
   [-radius <um>] \
   [-logicalChangeOnly] \
   [-noPlace]
 ```
 
-Important arguments:
+Arguments:
 
-| Argument | Meaning |
+| Argument | Description |
 |---|---|
-| `-net <net>` | Insert on the named net. |
-| `-term {inst/pin ...}` | Insert for selected sink terms on a common net. |
-| `-cell {cell1 ...}` | Repeater master cell or list of cells. If the cell is an inverter and LEQ checking is enabled, Innovus inserts an inverter pair. |
-| `-name <name>` | Base name for the inserted instance. For inverter pairs, names can be given as nested braces. |
-| `-newNetName <name>` | Base name for the new net created by repeater insertion. For inverter pairs, names can be given as nested braces. |
-| `-loc {x y}` | Place a buffer at a coordinate. For an inverter pair, `{x1 y1 x2 y2}` can place the two inverters separately. |
-| `-relativeDistToSink <w>` | Location based on driver/sink distance. `0.1` is near the sink; `0.9` is near the driver. Manual restriction: works with one term or a one-sink net, not general multi-sink nets. |
-| `-offLoadSlack <slack>` | Offload noncritical receivers below a slack threshold. Mutually exclusive with `-loc` and `-offLoadAtLoc`. |
-| `-noPlace` | Make only the logical connectivity change; inserted cells are not placed. Useful for post-mask/spare-cell flows. |
-| `-logicalChangeOnly` | Logical-only addition mode. |
+| `-help` | Print command usage. |
+| `-net <netName>` | Net where the repeater is inserted. |
+| `-term {term1 term2 ...}` | Sink terminal list. Terms must be connected to a common net. If `-term` is omitted, all terms of the net are buffered. |
+| `-cell {cell1 cell2 ...}` | Repeater master cell or list of cells. If an inverter is specified and `setEcoMode -LEQCheck true`, Innovus inserts an inverter pair. |
+| `-name <instName>` | Base name for inserted instance. For inverter pairs, two names can be specified with nested braces, for example `-name {{inv0 inv1}}`. |
+| `-newNetName <netName>` | Base name for the new net created by insertion. For inverter pairs, two names can be specified with nested braces. |
+| `-loc {x y}` | Location for a buffer. For an inverter pair, `{x1 y1 x2 y2}` places the two inverters separately. |
+| `-bufOrient {R0|R90|R180|R270|MX|MX90|MY|MY90}` | Legalized orientation. Requires `-loc`. |
+| `-relativeDistToSink <sinkWeight>` | Value from 0 to 1. `0.1` places near the sink; `0.9` places near the driver. Works only with one term or a one-sink net. |
+| `-offLoadSlack <slack>` | Offload noncritical receivers selected by slack. Mutually exclusive with `-loc` and `-offLoadAtLoc`. |
+| `-offLoadAtLoc {coords...}` | Insert at locations to drive sinks downstream from those locations. |
+| `-spreadDist <distance>` | Add repeaters every specified distance from the driver. |
+| `-firstSpreadDist <distance>` | Distance from driver for the first repeated insertion. Requires `-spreadDist`. |
+| `-spreadCount <number>` | Number of repeaters to add. |
+| `-spreadPrefix <prefix>` | Prefix for new instances and nets created by spread buffering. |
+| `-radius <um>` | Radius in which added instances may move. Requires `-loc`, `-relativeDistToSink`, or `-offLoadAtLoc`. |
+| `-logicalChangeOnly` | Perform logical-only addition. |
+| `-noPlace` | Do not place inserted cells; only logical connectivity is changed. Useful in post-mask/spare-cell style ECOs. |
 
 Manual-confirmed behavior:
 
-- If `-cell` is an inverter and `setEcoMode -LEQCheck true`, Innovus inserts a
+- `ecoAddRepeater` cuts wires by default.
+- If `-cell` is an inverter and `setEcoMode -LEQCheck true`, Innovus adds a
   back-to-back inverter pair.
-- If `setEcoMode -LEQCheck false`, Innovus can insert a single inverter.
-- `ecoAddRepeater` returns names for the new instance/net objects. For one
-  buffer, the return list is typically `{newInstName inputNet outputNet}`.
+- If `setEcoMode -LEQCheck false`, Innovus can add a single inverter.
+- The command can return new instance/net names. For one buffer, the return
+  list is typically `{newInstName inputNet outputNet}`. For an inverter pair,
+  the return list can contain six fields for the two inserted inverters and
+  their input/output nets.
 
 Examples:
 
 ```tcl
-# Insert one buffer on a one-sink net, near the sink.
-ecoAddRepeater \
-  -net core/u1/net_a \
-  -cell BUFX4 \
-  -relativeDistToSink 0.1
-
-# Insert one buffer on a one-sink net, near the driver.
-ecoAddRepeater \
-  -net core/u1/net_a \
-  -cell BUFX4 \
-  -relativeDistToSink 0.9
+# Insert a buffer on a net at an automatically selected location.
+ecoAddRepeater -net top/u1/net_a -cell BUFX4
 
 # Insert a buffer at an explicit location.
-ecoAddRepeater \
-  -net core/u1/net_a \
-  -cell BUFX4 \
-  -loc {123.0 450.0}
+ecoAddRepeater -net top/u1/net_a -cell BUFX4 -loc {123.0 450.0}
+
+# Insert a buffer near the sink on a one-sink net.
+ecoAddRepeater -net top/u1/net_a -cell BUFX4 -relativeDistToSink 0.1
+
+# Insert a buffer near the driver on a one-sink net.
+ecoAddRepeater -net top/u1/net_a -cell BUFX4 -relativeDistToSink 0.9
 
 # Insert a buffer only for selected sinks on the same net.
-ecoAddRepeater \
-  -term {U1/A U2/B U3/C} \
-  -cell BUFX4
+ecoAddRepeater -term {U1/A U2/B U3/C} -cell BUFX4
 
-# Capture the inserted instance and net names.
-set r [ecoAddRepeater -net core/u1/net_a -cell BUFX4 -loc {123.0 450.0}]
-set new_inst [lindex $r 0]
-set input_net [lindex $r 1]
-set output_net [lindex $r 2]
+# Capture the returned instance/net names.
+set r [ecoAddRepeater -net top/u1/net_a -cell BUFX4 -loc {123.0 450.0}]
+set newInstName [lindex $r 0]
+set inputNetName [lindex $r 1]
+set outputNetName [lindex $r 2]
 ```
 
-Single-inverter example for DBT-style compensation:
+Single-inverter insertion:
 
 ```tcl
-# Default LEQ behavior inserts inverter pairs. Disable it for one inverter.
+# Default LEQ behavior inserts inverter pairs.
+# Disable LEQ check when one single inverter is intended.
 setEcoMode -LEQCheck false
 
 ecoAddRepeater \
-  -term {U1/A U2/B} \
+  -term {U1/A} \
   -cell INVX1 \
-  -name DBT_INV_0 \
-  -newNetName DBT_N_0 \
+  -name ECO_INV_0 \
+  -newNetName ECO_INV_NET_0 \
   -noPlace
 ```
 
-Project wrapper:
+Inverter-pair insertion:
 
 ```tcl
-dbt::eco_insert_repeater \
-  -net core/u1/net_a \
-  -cell BUFX4 \
-  -loc {123.0 450.0}
+setEcoMode -LEQCheck true
 
-dbt::eco_insert_repeater \
-  -terms {U1/A U2/B} \
-  -cell INVX1 \
-  -name DBT_INV_0 \
-  -new_net_name DBT_N_0 \
-  -no_place \
-  -single_inverter true
+ecoAddRepeater \
+  -net top/u1/net_a \
+  -cell INVX4 \
+  -loc {123.0 450.0 145.0 480.0} \
+  -name {{ECO_INV_0 ECO_INV_1}} \
+  -newNetName {{ECO_N_0 ECO_N_1}}
 ```
 
-## 4. ECO mode settings
-
-### `setEcoMode`
+## 3. `setEcoMode`
 
 Purpose: control behavior of interactive ECO commands such as
 `ecoAddRepeater`, `ecoDeleteRepeater`, and `ecoChangeCell`.
 
+Syntax subset:
+
+```tcl
+setEcoMode \
+  [-help] \
+  [-reset] \
+  [-addPortAsNeeded true|false] \
+  [-batchMode true|false] \
+  [-honorDontTouch true|false] \
+  [-honorDontUse true|false] \
+  [-honorFixedNetWire true|false] \
+  [-honorFixedStatus true|false] \
+  [-honorPowerIntent true|false] \
+  [-inheritNetAttr true|false] \
+  [-LEQCheck true|false] \
+  [-modifyOnlyLayers <bottom_layer>:<top_layer>] \
+  [-prefixName <prefix>] \
+  [-preserveModuleFunction true|false] \
+  [-refinePlace true|false] \
+  [-spreadInverter true|false] \
+  [-updateTiming true|false] \
+  [-delayCalcEffort low|medium|high]
+```
+
 Relevant arguments:
 
-| Argument | Meaning |
+| Argument | Description |
 |---|---|
-| `-LEQCheck true|false` | Controls logical-equivalence behavior. `true` inserts/deletes inverter pairs for inverter ECOs. `false` allows single-inverter add/delete. Default is `true`. |
+| `-LEQCheck true|false` | Controls logical-equivalence checking. With `true`, inverter ECO insertion/deletion uses inverter pairs. With `false`, single-inverter add/delete is allowed. Default is `true`. |
+| `-batchMode true|false` | Batch many ECO operations. Must be exited explicitly with `setEcoMode -batchMode false`. |
 | `-honorDontTouch true|false` | Honor `dont_touch` nets/instances. Default is `true`. |
 | `-honorDontUse true|false` | Honor `dontUse` cells. Default is `true`. |
 | `-honorFixedNetWire true|false` | Protect fixed/cover net wires. Default is `true`. |
 | `-honorFixedStatus true|false` | Protect fixed instances. Default is `true`. |
 | `-honorPowerIntent true|false` | Enforce MSV/power-intent checks. Default is `true`. |
-| `-refinePlace true|false` | Legalize after ECO add/change. Default is `true`; disabling can improve runtime for many changes. |
-| `-batchMode true|false` | Batch many ECO operations. Exit batch mode explicitly with `false`. |
-| `-prefixName <prefix>` | Prefix for ECO inserted cells. |
-| `-reset` | Reset ECO mode settings to defaults. Must be first if used. |
+| `-refinePlace true|false` | Legalize placement after ECO add/change. Default is `true`. |
+| `-updateTiming true|false` | Control timing update after ECO commands. Default is `true`. |
+| `-prefixName <prefix>` | Prefix for ECO-inserted cells. |
+| `-reset` | Reset ECO mode settings. If used, it must be the first argument. |
 
-Example:
+Examples:
 
 ```tcl
-# Many logical ECO edits, then restore normal mode.
-setEcoMode -LEQCheck false -refinePlace false -updateTiming false
+# Allow a single-inverter insertion.
+setEcoMode -LEQCheck false
+ecoAddRepeater -term {U1/A} -cell INVX1 -name ECO_INV_0 -noPlace
 
-ecoAddRepeater -term {U1/A} -cell INVX1 -name DBT_INV_0 -newNetName DBT_N_0 -noPlace
+# Batch many ECO changes and update/legalize later.
+setEcoMode -batchMode true -updateTiming false -refinePlace false
+ecoAddRepeater -net net_a -cell BUFX4 -noPlace
+ecoDeleteRepeater -inst U_BUF1 -logicalChangeOnly
+setEcoMode -batchMode false
 
+# Restore defaults.
 setEcoMode -reset
 ```
 
-## 5. Delete an inserted repeater
+## 4. `ecoDeleteRepeater`
 
-### `ecoDeleteRepeater`
-
-Purpose: delete a buffer or a back-to-back inverter pair and merge wires after
+Purpose: delete a buffer or back-to-back inverter pair and merge wires after
 ECO.
 
-Syntax subset:
+Syntax:
 
 ```tcl
 ecoDeleteRepeater \
   [-help] \
   [-logicalChangeOnly] \
-  {-inst {inst1 inst2 ...} | -invPair {{inv1 inv2} {inv3 inv4} ...}}
+  {-inst {list_of_instances} | -invPair {{inv1 inv2} {inv3 inv4} ...}}
 ```
 
-Important arguments:
+Arguments:
 
-| Argument | Meaning |
+| Argument | Description |
 |---|---|
-| `-inst {insts}` | Delete specified buffer/inverter instances. If an inverter is specified and LEQ checking is enabled, Innovus looks for and deletes the tied back-to-back pair. |
-| `-invPair {{a b} ...}` | Explicit inverter pairs to delete/evaluate. |
-| `-logicalChangeOnly` | Logical-only deletion mode. |
+| `-help` | Print command usage. |
+| `-inst {inst1 inst2 ...}` | Buffer or inverter instances to delete. If an inverter is specified and `setEcoMode -LEQCheck true`, Innovus finds the paired inverter and deletes the tied back-to-back pair. |
+| `-invPair {{inv1 inv2} ...}` | Explicit inverter pairs to delete/evaluate. |
+| `-logicalChangeOnly` | Perform logical-only deletion. |
+
+Manual-confirmed notes:
+
+- `ecoDeleteRepeater` does not modify `dont_touch` nets if
+  `setEcoMode -honorDontTouch true`.
+- It cannot be used in post-mask ECO; use `loadECO <ecofile> -postMask` for
+  post-mask deletion.
 
 Examples:
 
@@ -323,67 +291,69 @@ Examples:
 # Delete one buffer.
 ecoDeleteRepeater -inst U_BUF1
 
-# Delete several repeaters.
+# Delete multiple repeaters.
 ecoDeleteRepeater -inst {U_BUF1 U_BUF2}
 
-# Delete an explicit inverter pair.
-ecoDeleteRepeater -invPair {{U_INV_A U_INV_B}}
+# Delete a back-to-back inverter pair containing U_INV1.
+ecoDeleteRepeater -inst U_INV1
+
+# Delete explicit inverter pairs.
+ecoDeleteRepeater -invPair {{U_INV_A U_INV_B} {U_INV_C U_INV_D}}
+
+# Logical-only deletion.
+ecoDeleteRepeater -inst U_BUF1 -logicalChangeOnly
 ```
 
-Project wrapper:
+## 5. `addRepeaterByRule`
 
-```tcl
-dbt::eco_delete_repeater -insts {U_BUF1 U_BUF2}
-dbt::eco_delete_repeater -inv_pair {{U_INV_A U_INV_B}}
-dbt::eco_delete_repeater -insts {U_BUF1} -logical_only
-```
+Purpose: insert buffers/inverters according to a rule file. The rules can
+constrain max net length, max radius length, max capacitance, max fanout, and
+related metrics.
 
-## 6. Rule-based repeater insertion
-
-### `addRepeaterByRule`
-
-Purpose: insert buffers/inverters according to a rule file. This is useful for
-bulk buffering driven by constraints such as max net length, radius length,
-capacitance, and fanout.
-
-Syntax subset:
+Syntax:
 
 ```tcl
 addRepeaterByRule \
   [-help] \
-  [-rule <rule_file>] \
-  [-nets {net1 net2 ...} | -selNet <file> | -selected] \
-  [-excNet <file>] \
-  [-preRoute | -postRoute | -alongRoute] \
-  [-netMapping <file>] \
-  [-outDir <dir>] \
-  [-copyNetAttribute] \
   [-allowMixedSignal] \
-  [-reportIgnoredNets <file>] \
+  [-copyNetAttribute] \
+  [-excNet <excludeNetFile>] \
+  [-netMapping <fileName>] \
+  [-nets {list_of_nets}] \
+  [-outDir <directoryName>] \
+  [-preRoute | -postRoute | -alongRoute] \
+  [-reportIgnoredNets <ignoredNetFile>] \
+  [-rule <fileName>] \
+  [-selNet <selNetFile>] \
+  [-selected] \
   [-template]
 ```
 
-Important arguments:
+Arguments:
 
-| Argument | Meaning |
+| Argument | Description |
 |---|---|
-| `-rule <file>` | Rule file listing allowed repeaters and constraints. Only cells in the rule file are inserted. |
-| `-nets {nets}` | Process only listed nets. Mutually exclusive with `-selNet` and `-selected`. |
+| `-rule <file>` | Rule file listing legal repeaters and constraints. Only buffers/inverters in the rule file are inserted. |
+| `-nets {net1 net2 ...}` | Process listed nets. Mutually exclusive with `-selNet` and `-selected`. |
 | `-selNet <file>` | Process nets listed in a file. Mutually exclusive with `-nets` and `-selected`. |
+| `-selected` | Process nets selected in GUI or by `selectNet`. Mutually exclusive with `-nets` and `-selNet`. |
 | `-excNet <file>` | Exclude nets listed in a file. |
-| `-preRoute` | Pre-route insertion using different routing topologies; database should be global-routed with pre-route RC extraction. |
-| `-postRoute` | Post-route insertion along detailed route with detailed RC extraction. Minimizes routing changes. |
-| `-alongRoute` | Insert along route; database should be global-routed with pre-route RC extraction. |
+| `-preRoute` | Insert repeaters before detailed route; database should be global-routed with pre-route RC extraction. |
+| `-postRoute` | Insert repeaters after detailed route with detailed RC extraction; routing changes are minimized. |
+| `-alongRoute` | Insert repeaters along the route; database should be global-routed with pre-route RC extraction. |
 | `-netMapping <file>` | Write original-to-new net mapping. |
-| `-outDir <dir>` | Directory for detailed failure reports. |
-| `-template` | Write a template rule file; other parameters are ignored. |
+| `-outDir <dir>` | Directory for detailed failure reports. Default report root is `timingReports`. |
+| `-copyNetAttribute` | Copy original net attributes to inserted nets. |
+| `-allowMixedSignal` | Allow buffering on mixed-signal nets. |
+| `-reportIgnoredNets <file>` | Report nets where no buffers were inserted and why. |
+| `-template` | Write a template rule file. Other parameters are ignored. |
 
 Manual-confirmed caution:
 
-- `addRepeaterByRule` does not legalize newly inserted buffers. Run placement
-  legalization/refinement and ECO routing as appropriate for the selected mode.
+- `addRepeaterByRule` does not legalize newly added buffers. Run placement
+  legalization/refinement and ECO routing as appropriate.
 
-Small rule-file example:
+Minimal rule file example:
 
 ```tcl
 # repeater.rule
@@ -393,10 +363,13 @@ SetDefaultMaxNetLength 100.0
 SetDefaultMaxFanout 20
 ```
 
-Command examples:
+Examples:
 
 ```tcl
-# Pre-route bulk insertion for selected nets.
+# Generate a template rule file.
+addRepeaterByRule -template
+
+# Pre-route rule-based insertion on selected nets.
 addRepeaterByRule \
   -rule repeater.rule \
   -preRoute \
@@ -404,53 +377,86 @@ addRepeaterByRule \
   -netMapping repeater_net_map.txt \
   -outDir timingReports
 
-# Generate a template rule file.
-addRepeaterByRule -template
-```
-
-Project wrapper:
-
-```tcl
-dbt::add_repeater_by_rule \
+# Post-route insertion along detailed route.
+addRepeaterByRule \
   -rule repeater.rule \
-  -pre_route \
-  -nets {net_a net_b} \
-  -net_mapping repeater_net_map.txt \
-  -out_dir timingReports
+  -postRoute \
+  -selNet selected_nets.txt \
+  -reportIgnoredNets ignored_nets.rpt
 ```
 
-## 7. DEF and log output helpers
-
-### `defOut`
+## 6. `defOut`
 
 Purpose: write design information to a DEF file.
 
-For this project, use:
+Syntax subset:
 
 ```tcl
-defOut -floorplan -netlist -routing -unplaced out.def
+defOut \
+  <fileName> \
+  [-floorplan] \
+  [-netlist] \
+  [-routing] \
+  [-unplaced] \
+  [-scanChain] \
+  [-selected] \
+  [-usedVia] \
+  [-withShield]
 ```
 
 Relevant arguments:
 
-| Argument | Meaning |
+| Argument | Description |
 |---|---|
-| `-floorplan` | Write floorplan data and placed standard cells. |
+| `<fileName>` | Output DEF file. A `.gz` suffix automatically compresses the output. |
+| `-floorplan` | Write floorplan data: rows, chip size, pad/block instances, and placed standard cells. |
 | `-netlist` | Write netlist/connectivity information. Manual note: use with `-unplaced` if the design has not been placed. |
-| `-routing` | Write routing information to the DEF `NETS` section; implies `-netlist`. |
-| `-unplaced` | Write unplaced standard cells. Required for DBT snapshots when compensation cells are unplaced. |
-| `-scanChain` | Write scan-chain information if scan-chain preservation matters in your flow. |
+| `-routing` | Write routing information to the DEF `NETS` section. Implies `-netlist`. |
+| `-unplaced` | Write unplaced standard cell information. |
+| `-scanChain` | Write scan-chain information. |
+| `-selected` | Write selected instance/net/routing information. |
+| `-usedVia` | Write only used vias. |
+| `-withShield` | With `-routing -selected`, also write shielding routing. |
 
 Examples:
 
 ```tcl
-defOut -floorplan -netlist -routing -unplaced pre.def
-defOut -floorplan -netlist -routing -unplaced post.def
+# deleteBufferTree-safe snapshot.
+defOut -floorplan -netlist -routing -unplaced post_deleteBufferTree.def
+
+# Include scan-chain information if needed by the flow.
+defOut -floorplan -netlist -routing -unplaced -scanChain post.def
+
+# Gzip-compressed DEF.
+defOut -floorplan -netlist -routing -unplaced post.def.gz
 ```
 
-### `redirect`
+## 7. `redirect`
 
-Purpose: redirect Innovus command output to a file or variable.
+Purpose: redirect Innovus command output to a file or Tcl variable.
+
+Syntax subset:
+
+```tcl
+redirect [<file_or_var_name>] [<command>] \
+  [-append] \
+  [-tee] \
+  [-stderr] \
+  [-variable] \
+  [-bg]
+```
+
+Arguments:
+
+| Argument | Description |
+|---|---|
+| `<file_or_var_name>` | File or variable name for output. |
+| `<command>` | Command to execute. |
+| `-append` | Append output. |
+| `-tee` | Write to both screen and file/variable. |
+| `-stderr` | Redirect stderr also. |
+| `-variable` | Redirect to a Tcl variable. |
+| `-bg` | Run command in a forked background process. Use carefully due to memory cost. |
 
 Examples:
 
@@ -458,252 +464,300 @@ Examples:
 redirect deleteBufferTree.log { deleteBufferTree -verbose }
 redirect timing.txt "timeDesign -postRoute"
 redirect timing.txt "timeDesign -postRoute" -append -tee
+
+# Redirect dbGet output.
+redirect inst_name.rpt {puts "[dbGet top.insts.name]"}
 ```
 
-## 8. Low-level logical DB edits
+## 8. Low-level netlist edit commands
 
-These commands are used by `tcl/dbt_manual.tcl`. Prefer native
-`deleteBufferTree` or ECO commands for production use; use these only when you
-need explicit algorithm control.
+These are native Innovus commands. They are lower-level than
+`deleteBufferTree` and `ecoAddRepeater`; use them only when explicit
+connectivity control is needed.
 
-### `addInst`
+## 8.1 `addInst`
 
 Purpose: add an instance.
 
-```tcl
-addInst -cell <cell_name> -inst <inst_name> \
-  [-loc {x y} [-ori R0|R90|R180|R270|MX|MX90|MY|MY90]] \
-  [-place_status placed|fixed|soft_fixed|unplaced|cover]
-```
-
-Manual detail: default placement status is `unplaced`. The manual also states
-that the default location is the design origin if no `-loc` is given. For
-DBT-style logical changes, keep the instance unplaced and verify snapshots with
-DEF `-unplaced`.
-
-Example:
+Syntax:
 
 ```tcl
-addInst -cell INVX1 -inst DBT_INV_0
+addInst \
+  [-help] \
+  [-dontSnapToPlacementGrid] \
+  [-moduleBased <verilogModule>] \
+  [-physical] \
+  -cell <cellName> \
+  -inst <instName> \
+  [-loc {x y} [-ori {R0|R90|R180|R270|MX|MX90|MY|MY90}]] \
+  [-place_status <placementStatus>]
 ```
 
-### `addNet`
+Arguments:
 
-Purpose: add a logical or physical net.
-
-```tcl
-addNet <net_name>
-addNet <net_name> -bus <start>:<end>
-addNet <net_name> -moduleBased <verilog_module>
-```
+| Argument | Description |
+|---|---|
+| `-cell <cellName>` | Master cell. |
+| `-inst <instName>` | Instance name. |
+| `-loc {x y}` | Location. If omitted, manual states Innovus places the instance at design origin. |
+| `-ori <orientation>` | Orientation. Default is `R0`. |
+| `-place_status <status>` | Placement status: `cover`, `placed`, `fixed`, `soft_fixed`, or `unplaced`. Default is `unplaced`. |
+| `-moduleBased <module>` | Add instance to a specified Verilog module. |
+| `-physical` | Place a physical instance without updating the netlist. |
+| `-dontSnapToPlacementGrid` | With `-loc`, place at the exact location even if off-grid. |
 
 Examples:
 
 ```tcl
-addNet DBT_N_0
-addNet bus_net -bus 0:7
+# Add an unplaced logical instance.
+addInst -cell INVX1 -inst ECO_INV_0
+
+# Add and place a buffer.
+addInst -cell BUFX4 -inst ECO_BUF_0 -loc {100.0 200.0} -ori R0 -place_status placed
 ```
 
-Implementation note: the project Tcl uses `addNet <net_name>` first and falls
-back to `addNet -name <net_name>` for compatibility with observed Innovus
-usage examples.
+## 8.2 `addNet`
 
-### `attachTerm`
+Purpose: add a logical or physical net.
 
-Purpose: connect an instance terminal to a net. If the terminal is already
-connected elsewhere, Innovus detaches it first and reconnects it to the new net.
+Syntax:
 
 ```tcl
-attachTerm <inst_name> <term_name> <net_name> \
-  [-moduleBased <module_name>] \
+addNet \
+  [-help] \
+  <netName> \
+  [-bus <startID>:<endID>] \
+  [-moduleBased <verilogModule>] \
+  [-power | -ground]
+```
+
+Arguments:
+
+| Argument | Description |
+|---|---|
+| `<netName>` | Net to add. The manual says the net name must be specified before other parameters. |
+| `-bus <start>:<end>` | Create or resize bus net range. |
+| `-moduleBased <module>` | Add net to a specified Verilog module. |
+| `-power` | Add a power net. |
+| `-ground` | Add a ground net. |
+
+Examples:
+
+```tcl
+addNet ECO_N_0
+addNet data_bus -bus 0:7
+addNet VDD_ECO -power
+addNet VSS_ECO -ground
+```
+
+## 8.3 `attachTerm`
+
+Purpose: attach an instance terminal to a net. If the terminal is already
+connected to another net, Innovus detaches it and reconnects it to the new net.
+
+Syntax:
+
+```tcl
+attachTerm \
+  [-help] \
+  <instName> \
+  <termName> \
+  <netName> \
+  [-moduleBased <moduleName>] \
   [-noNewPort] \
-  [-pin <ref_inst> <ref_pin>] \
-  [-port <port_name>]
+  [-pin <refInstName> <refTermName>] \
+  [-port <portName>]
 ```
 
-Example:
+Arguments:
+
+| Argument | Description |
+|---|---|
+| `<instName>` | Instance containing the terminal. |
+| `<termName>` | Terminal/pin name to connect. |
+| `<netName>` | Net to connect to. The net must exist. |
+| `-moduleBased <module>` | Attach in a specified Verilog module. |
+| `-noNewPort` | Do not create hierarchical ports as needed. Error if existing ports cannot connect the terminal. |
+| `-pin <refInst> <refTerm>` | Use the hterm used for a reference instance terminal connection. Mutually exclusive with `-port`. |
+| `-port <portName>` | Use a specific hierarchical port. Mutually exclusive with `-pin`. |
+
+Examples:
 
 ```tcl
-attachTerm DBT_INV_0 A root_net
-attachTerm DBT_INV_0 Y DBT_N_0
-attachTerm U_SINK A DBT_N_0
+attachTerm ECO_INV_0 A root_net
+attachTerm ECO_INV_0 Y ECO_N_0
+attachTerm U_SINK A ECO_N_0
+
+# Use a specific hierarchical port.
+attachTerm U1/U2/U3 A net27 -port myPort
 ```
 
-### `attachModulePort`
+## 8.4 `attachModulePort`
 
-Purpose: connect a module port to a net. Use `-` as the module name for the
-top module.
+Purpose: attach a port in a specified hierarchical instance, or the top level,
+to a net.
+
+Syntax:
 
 ```tcl
-attachModulePort <module_name_or_dash> <port_name> <net_name> [-noNewPort]
+attachModulePort \
+  [-help] \
+  <moduleName> \
+  <portName> \
+  <netName> \
+  [-noNewPort]
 ```
 
-Example:
+Arguments:
+
+| Argument | Description |
+|---|---|
+| `<moduleName>` | Module/hinst name. Use `-` for the top module. |
+| `<portName>` | Port name. |
+| `<netName>` | Net on the module. |
+| `-noNewPort` | Prevent creation of hierarchical ports. |
+
+Examples:
 
 ```tcl
-attachModulePort - out DBT_N_0
+# Attach a top-level port.
+attachModulePort - out ECO_N_0
+
+# Attach a hierarchical module port.
+attachModulePort U1/U2 p1 U1/U2/n1
 ```
 
-### `deleteInst`
+## 8.5 `deleteInst`
 
 Purpose: delete logical or physical instances.
 
+Syntax:
+
 ```tcl
-deleteInst <inst_or_inst_list> [-honorDontTouch] [-moduleBased <module>] [-verbose]
+deleteInst \
+  [-help] \
+  <listOfInst> \
+  [-honorDontTouch] \
+  [-moduleBased <moduleName>] \
+  [-verbose]
 ```
+
+Arguments:
+
+| Argument | Description |
+|---|---|
+| `<listOfInst>` | Instance or list of instances to delete. Wildcards are supported. |
+| `-honorDontTouch` | Skip instances marked `dont_touch`. |
+| `-moduleBased <module>` | Delete from a specified Verilog module. |
+| `-verbose` | Print deleted-instance messages. |
 
 Examples:
 
 ```tcl
 deleteInst U_BUF1
 deleteInst {U_BUF1 U_BUF2} -verbose
+deleteInst U1/*
+deleteInst * -moduleBased SPGM
+
+# Manual recommends Tcl join when using dbGet output.
+deleteInst [join [dbGet top.insts.name]]
 ```
 
-### `deleteNet`
+## 8.6 `deleteNet`
 
-Purpose: logically delete a net. If the net is routed, associated wire segments
+Purpose: logically delete nets. If a net is routed, associated wire segments
 are also deleted.
 
-```tcl
-deleteNet <net_name> [-bus <start>:<end>] [-moduleBased <module>]
-```
-
-Example:
+Syntax:
 
 ```tcl
-deleteNet old_buffer_output_net
+deleteNet \
+  [-help] \
+  <netName> \
+  [-bus <startId>:<endId>] \
+  [-moduleBased <verilogModule>]
 ```
 
-## 9. Manual Tcl DBT algorithm
+Arguments:
 
-Source:
-
-```tcl
-source /nethome/hhsiao30/deleteBufferTree/tcl/dbt_manual.tcl
-```
-
-### `dbt::analyze_delete_buffer_tree`
-
-Purpose: dry-run the project manual DBT algorithm and print/report what would
-be changed.
-
-```tcl
-dbt::analyze_delete_buffer_tree \
-  [-node asap7|tsmcn7] \
-  [-nets {root_net1 root_net2 ...}] \
-  [-verbose 0|1] \
-  [-max_trees <N>]
-```
-
-Example:
-
-```tcl
-dbt::analyze_delete_buffer_tree -node asap7 -max_trees 10
-```
-
-### `dbt::manual_delete_buffer_tree`
-
-Purpose: apply the project manual DBT algorithm in Tcl using Innovus DB editing
-commands. This is for transparency and controlled experiments. For production
-exactness, prefer native `deleteBufferTree`.
-
-```tcl
-dbt::manual_delete_buffer_tree \
-  [-node asap7|tsmcn7] \
-  [-nets {root_net1 root_net2 ...}] \
-  [-dry_run 0|1] \
-  [-verbose 0|1] \
-  [-max_trees <N>] \
-  [-new_cell <master>] \
-  [-new_cell_in_pin <pin>] \
-  [-new_cell_out_pin <pin>] \
-  [-new_inst_prefix <prefix>] \
-  [-new_net_prefix <prefix>]
-```
+| Argument | Description |
+|---|---|
+| `<netName>` | Net to delete. Wildcards are supported. |
+| `-bus <start>:<end>` | Delete specified bus bits. The bus bit net must be one-pin/floating on the other side and adjacent to the MSB or LSB of the existing bus. |
+| `-moduleBased <module>` | Delete net from a specified Verilog module. |
 
 Examples:
 
 ```tcl
-# Dry-run all candidate trees using ASAP7 patterns.
-dbt::manual_delete_buffer_tree -node asap7 -dry_run 1
-
-# Apply to selected root nets only.
-dbt::manual_delete_buffer_tree \
-  -node asap7 \
-  -nets {root_net_a root_net_b} \
-  -new_inst_prefix DBT_INV_ \
-  -new_net_prefix DBT_N_
-
-defOut -floorplan -netlist -routing -unplaced post_manual_dbt.def
+deleteNet ECO_N_0
+deleteNet old_buffer_net*
+deleteNet h1/net2 -bus 3:2
 ```
 
-Scope limitations:
+## 9. Small native-only workflows
 
-- Intended for flat, pre-CTS designs.
-- Cell classification is pattern-based and uses the repo presets.
-- It intentionally skips clock sinks, single-inverter special cases, and
-  degenerate/island cases according to the project algorithm.
-
-## 10. Minimal project workflows
-
-### Workflow A: native DBT with pre/post DEF
+### 9.1 Native deleteBufferTree with pre/post DEF
 
 ```tcl
-source /nethome/hhsiao30/deleteBufferTree/tcl/dbt_commands.tcl
+defOut -floorplan -netlist -routing -unplaced pre_deleteBufferTree.def
 
-dbt::write_delete_buffer_tree_script run_dbt.tcl \
-  -pre_def pre_deleteBufferTree.def \
-  -post_def post_deleteBufferTree.def \
-  -log deleteBufferTree.log \
-  -include_unplaced true \
-  -verbose
+redirect deleteBufferTree.log {
+  deleteBufferTree -verbose
+}
 
-source run_dbt.tcl
+defOut -floorplan -netlist -routing -unplaced post_deleteBufferTree.def
 ```
 
-### Workflow B: targeted DBT on a few nets
+### 9.2 Run deleteBufferTree only on selected nets
 
 ```tcl
-source /nethome/hhsiao30/deleteBufferTree/tcl/dbt_commands.tcl
-
 defOut -floorplan -netlist -routing -unplaced pre_selected.def
 
-dbt::delete_buffer_tree \
-  -nets {net_a net_b net_c} \
-  -verbose \
-  -log selected_deleteBufferTree.log
+deleteBufferTree \
+  -net {net_a net_b net_c} \
+  -preserveRoute \
+  -verbose
 
 defOut -floorplan -netlist -routing -unplaced post_selected.def
 ```
 
-### Workflow C: manual DBT experiment
+### 9.3 Insert a single ECO buffer and record names
 
 ```tcl
-source /nethome/hhsiao30/deleteBufferTree/tcl/dbt_manual.tcl
-
-dbt::analyze_delete_buffer_tree -node asap7 -max_trees 20
-
-dbt::manual_delete_buffer_tree \
-  -node asap7 \
-  -max_trees 20 \
-  -new_inst_prefix DBT_INV_ \
-  -new_net_prefix DBT_N_
-
-defOut -floorplan -netlist -routing -unplaced post_manual_dbt.def
-```
-
-### Workflow D: ECO insert and then route
-
-```tcl
-setEcoMode -LEQCheck true -refinePlace true
-
-set r [ecoAddRepeater \
+set result [ecoAddRepeater \
   -net net_a \
   -cell BUFX4 \
   -loc {123.0 450.0}]
 
-puts "Inserted: $r"
+puts "new instance = [lindex $result 0]"
+puts "input net    = [lindex $result 1]"
+puts "output net   = [lindex $result 2]"
+```
 
-# Follow your normal legalization/routing flow here.
-# For detailed ECO routing, this is commonly followed by ecoRoute in a routed design.
+### 9.4 Insert a single ECO inverter
+
+```tcl
+setEcoMode -LEQCheck false
+
+set result [ecoAddRepeater \
+  -term {U_SINK/A} \
+  -cell INVX1 \
+  -name ECO_INV_0 \
+  -newNetName ECO_N_0 \
+  -noPlace]
+
+puts "single inverter ECO result = $result"
+```
+
+### 9.5 Low-level logical insert and reconnect
+
+```tcl
+addNet ECO_N_0
+addInst -cell INVX1 -inst ECO_INV_0
+
+attachTerm ECO_INV_0 A root_net
+attachTerm ECO_INV_0 Y ECO_N_0
+attachTerm U_SINK A ECO_N_0
+
+defOut -floorplan -netlist -routing -unplaced post_low_level_edit.def
 ```
