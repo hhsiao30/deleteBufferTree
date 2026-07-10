@@ -373,9 +373,234 @@ addRepeaterByRule \
   -reportIgnoredNets ignored_nets.rpt
 ```
 
-## 6. Small key workflows
+## 6. Naming behavior of modified netlists
 
-### 6.1 Run `deleteBufferTree` only on selected nets
+This section covers instance/net names created or preserved by the native
+buffer insertion/deletion commands. It is based on the Innovus 25.11 manual and
+small Innovus experiments on 2026-07-10 using `v25.11-s102_1`.
+
+### 6.1 `ecoAddRepeater` with explicit names
+
+Manual-confirmed behavior:
+
+- `-name <instName>` specifies the base name for the inserted repeater instance.
+- `-newNetName <netName>` specifies the base name for the new net created by
+  repeater insertion.
+- For inverter pairs, specify two names using nested braces:
+  `-name {{inv0 inv1}} -newNetName {{net0 net1}}`.
+- The command returns the created instance/net names.
+
+Observed single-buffer result:
+
+```tcl
+set r [ecoAddRepeater \
+  -net net_a \
+  -cell BUFX4 \
+  -name MY_BUF \
+  -newNetName MY_NET \
+  -logicalChangeOnly]
+```
+
+Return list shape:
+
+```text
+MY_BUF net_a MY_NET
+```
+
+Netlist connectivity shape:
+
+```text
+driver/Y -> net_a -> MY_BUF/A
+MY_BUF/Y -> MY_NET -> sinks
+```
+
+So, for a single inserted buffer:
+
+| Return field | Meaning |
+|---|---|
+| `[lindex $r 0]` | New instance name. |
+| `[lindex $r 1]` | Input-side net name. This is usually the original net. |
+| `[lindex $r 2]` | Output-side net name. This is the inserted/new net. |
+
+Observed inverter-pair result:
+
+```tcl
+setEcoMode -LEQCheck true
+
+set r [ecoAddRepeater \
+  -net net_a \
+  -cell INVX1 \
+  -name {{I0 I1}} \
+  -newNetName {{N0 N1}} \
+  -logicalChangeOnly]
+```
+
+Return list shape:
+
+```text
+I0 net_a N0 I1 N0 N1
+```
+
+Netlist connectivity shape:
+
+```text
+driver/Y -> net_a -> I0/A
+I0/Y     -> N0    -> I1/A
+I1/Y     -> N1    -> sinks
+```
+
+So, for an inverter pair:
+
+| Return field | Meaning |
+|---|---|
+| `[lindex $r 0]` | First inverter instance. |
+| `[lindex $r 1]` | First inverter input net, usually the original net. |
+| `[lindex $r 2]` | First inverter output net. |
+| `[lindex $r 3]` | Second inverter instance. |
+| `[lindex $r 4]` | Second inverter input net, same net as field 2. |
+| `[lindex $r 5]` | Second inverter output net. |
+
+### 6.2 `ecoAddRepeater` with automatic names
+
+If `-name` and `-newNetName` are omitted, Innovus generates names. In the
+experiment, the default ECO prefix produced:
+
+```text
+instance: FE_ECOC0_net_a
+new net : FE_ECON0_net_a
+return  : FE_ECOC0_net_a net_a FE_ECON0_net_a
+```
+
+After:
+
+```tcl
+setEcoMode -prefixName TESTECO
+```
+
+the generated names became:
+
+```text
+instance: FE_TESTECOC0_net_a
+new net : FE_TESTECON0_net_a
+return  : FE_TESTECOC0_net_a net_a FE_TESTECON0_net_a
+```
+
+Manual note: `setEcoMode -prefixName <prefix>` adds a prefix to ECO-inserted
+cells. The observed generated names use the prefix inside the `FE_<prefix>C...`
+and `FE_<prefix>N...` naming pattern. If exact names matter, prefer explicit
+`-name` and `-newNetName`, or capture the return list.
+
+### 6.3 `ecoAddRepeater` on selected sinks
+
+When using `-term`, Innovus cuts only the selected sink terminals away from the
+common source net.
+
+Observed single-inverter example:
+
+```tcl
+setEcoMode -LEQCheck false
+
+set r [ecoAddRepeater \
+  -term {U_SINK/A} \
+  -cell INVX1 \
+  -name S_INV \
+  -newNetName S_NET \
+  -logicalChangeOnly]
+```
+
+Observed connectivity shape:
+
+```text
+driver/Y -> original_net -> S_INV/A and unselected sinks
+S_INV/Y  -> S_NET        -> selected sink
+```
+
+### 6.4 `ecoDeleteRepeater` net merge naming
+
+Manual-confirmed behavior: `ecoDeleteRepeater` deletes a buffer or
+back-to-back inverter pair and merges wires after ECO. The manual does not
+provide a user option for choosing the merged net name.
+
+Observed single-buffer deletion:
+
+Before:
+
+```text
+driver/Y -> n0 -> U_BUF/A
+U_BUF/Y  -> n1 -> sink/A
+```
+
+Command:
+
+```tcl
+ecoDeleteRepeater -inst U_BUF -logicalChangeOnly
+```
+
+After:
+
+```text
+driver/Y -> n0 -> sink/A
+```
+
+Observed result: the driver/input-side net `n0` survived, and the
+buffer-output-side net `n1` was removed.
+
+### 6.5 `deleteBufferTree` net merge naming
+
+Manual-confirmed behavior: `deleteBufferTree` removes eligible buffers and
+inverter pairs. It does not provide `-name` or `-newNetName` controls.
+
+Observed single-buffer deletion with non-buffer driver/sink:
+
+Before:
+
+```text
+driver/Y -> n0 -> U_BUF/A
+U_BUF/Y  -> n1 -> sink/A
+```
+
+Commands tested:
+
+```tcl
+deleteBufferTree -net {n0} -verbose
+deleteBufferTree -net {n1} -verbose
+```
+
+After, in both tests:
+
+```text
+driver/Y -> n0 -> sink/A
+```
+
+Observed result: the driver/input-side net `n0` survived, and the
+buffer-output-side net `n1` was removed. If an exact survivor name is critical,
+verify on the target design because the manual describes wire merging but does
+not explicitly guarantee a net-name survivor rule.
+
+### 6.6 `addRepeaterByRule` naming
+
+Manual/user-guide confirmed behavior:
+
+- `addRepeaterByRule -netMapping <file>` writes original-to-new net mappings.
+- The manual example maps an original net to generated names like
+  `FE_new_net1_<origNet>` and `FE_new_net2_<origNet>`.
+- The Innovus user guide default naming convention lists:
+  - `FE_ARRC`: instance added by `add_repeater_by_rule`
+  - `FE_ARRN`: net added by `add_repeater_by_rule`
+
+Use `-netMapping` whenever names must be consumed by downstream scripts:
+
+```tcl
+addRepeaterByRule \
+  -rule repeater.rule \
+  -preRoute \
+  -nets {net_a net_b} \
+  -netMapping repeater_net_map.txt
+```
+
+## 7. Small key workflows
+
+### 7.1 Run `deleteBufferTree` only on selected nets
 
 ```tcl
 deleteBufferTree \
@@ -384,7 +609,7 @@ deleteBufferTree \
   -verbose
 ```
 
-### 6.2 Insert one ECO buffer and record names
+### 7.2 Insert one ECO buffer and record names
 
 ```tcl
 set result [ecoAddRepeater \
@@ -397,7 +622,7 @@ puts "input net    = [lindex $result 1]"
 puts "output net   = [lindex $result 2]"
 ```
 
-### 6.3 Insert one single ECO inverter
+### 7.3 Insert one single ECO inverter
 
 ```tcl
 setEcoMode -LEQCheck false
@@ -412,7 +637,7 @@ set result [ecoAddRepeater \
 puts "single inverter ECO result = $result"
 ```
 
-### 6.4 Delete one ECO buffer
+### 7.4 Delete one ECO buffer
 
 ```tcl
 ecoDeleteRepeater -inst U_BUF1
